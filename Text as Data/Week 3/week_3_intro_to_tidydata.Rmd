@@ -1,0 +1,184 @@
+---
+title: "Psyc 499: Text as Data"
+author: "Joe Hoover"
+date: "01.23.19 - Week 3 Lab"
+output:
+  html_notebook:
+    toc: true
+---
+
+## Into the tidyverse
+
+Today, we'll focus on "tidy" data and approaches to transforming messy data into tidy data. 
+
+### Setup environment 
+
+```{r}
+if (require(tidyverse) !=T) {
+  install.packages('tidyverse')
+  require(tidyverse)
+}
+
+```
+
+
+### Tidy data
+
+Data can be organized or structured in many different ways. 
+
+Consider data representing observations for four variables: country, year, cases, and population. 
+
+<div class="alert alert-success">
+  <strong>How could we structure this data?</strong> 
+</div>
+
+
+```{r}
+table1
+```
+
+```{r}
+table2
+```
+
+```{r}
+table3
+```
+
+```{r}
+table4a
+table4b
+```
+
+
+<div class="alert alert-success">
+  <strong>Which do you think is the "tidiest? Why?</strong> 
+</div>
+
+#### Defining tidy data
+
+Within the tidyverse, there are three rules for tidy data:
+
+1. Each variable must have its own column.
+2. Each observation must have its own row.
+3. Each value must have its own cell.
+
+
+<div class="alert alert-success">
+  <strong>Which of the datasets above is tidy according to these rules?</strong> 
+</div>
+
+#### Why tidy data?
+
+* Promotes consistency across datasets
+* Streamlined usage within R environment 
+    * Vecorization
+    * Other R packages
+    
+## Tidying up
+
+A lot of data isn't tidy; however, tidyr offers a set of core functions (like dplyr) that can help make messy data tidy
+
+
+### `gather()`
+
+```{r}
+table4a
+```
+
+<div class="alert alert-success">
+  <strong>What do we need to do to make this data tidy?</strong> 
+</div>
+
+
+```{r}
+table4a %>% 
+  gather(`1999`, `2000`, key = "year", value = "cases")
+```
+
+
+```{r}
+table4b
+```
+
+```{r}
+table4b %>% 
+  gather(`1999`, `2000`, key = "year", value = "population")
+```
+
+
+
+```{r}
+tidy4a <- table4a %>% 
+  gather(`1999`, `2000`, key = "year", value = "cases")
+
+tidy4b <- table4b %>% 
+  gather(`1999`, `2000`, key = "year", value = "population")
+
+left_join(tidy4a, tidy4b)
+```
+
+
+
+### `spread()`
+
+```{r}
+table2
+```
+
+
+
+<div class="alert alert-success">
+  <strong>What do we need to do to make this data tidy?</strong> 
+</div>
+
+```{r}
+table2 %>%
+    spread(key = type, value = count)
+```
+
+
+<div class="alert alert-info">
+**NOTE:** `gather()` makes wide tables narrower and longer; `spread()` makes long tables shorter and wider.
+  </div>
+
+
+### `separate()`
+
+```{r}
+table3
+```
+
+<div class="alert alert-success">
+  <strong>What do we need to do to make this data tidy?</strong> 
+</div>
+
+
+```{r}
+table3 %>% 
+  separate(rate, into = c("cases", "population"))
+```
+
+We could also do:
+
+```{r}
+table3 %>% 
+  separate(rate, into = c("cases", "population"), sep = "/")
+```
+
+### `unite()`
+
+```{r}
+starwars
+```
+
+```{r}
+starwars2 <- starwars %>%
+  separate(name, into = c('first_name','last_name'), sep = '\\s')
+```
+
+```{r}
+starwars2 %>%
+  unite(name, first_name, last_name, sep=' ')
+```
+

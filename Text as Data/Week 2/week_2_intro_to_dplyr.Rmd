@@ -1,0 +1,457 @@
+---
+title: "Psyc 499: Text as Data"
+author: "Joe Hoover"
+date: "01.17.19 - Week 2 Lab"
+output:
+  html_notebook:
+    toc: true
+---
+
+## Introduction to Data Transformation with `dplyr`
+
+_Materials for this week's lab have been taken from [chapter 5 of R for Data Science](https://r4ds.had.co.nz/transform.html)._
+
+Today, we will examine a range of methods for manipulating and transforming data. This is an essential component of working with data _and_ it is one of the major motivations behind the `tidyverse`. 
+
+### Setup environment 
+
+
+<div class="alert alert-info">
+  <strong>Sidenote:</strong> `pacman` is a package that offers a convenient function for loading packages, `p_load`. If you try to `p_load` a package that is not installed, it automatically installs it for you!
+</div>
+
+
+```{r, results=F}
+
+# This code checks if pacman is installed and 
+# installs it if it isn't.
+
+if (require(pacman) == FALSE) {
+  install.packages('pacman')
+} else require(pacman)
+
+p_load(nycflights13, tidyverse)
+
+```
+
+
+### Exploring `nycflights13`
+
+Let's take a look at the dataset we will be exploring, `nycflights13`. This data contains information about the flights that departed from NYC in 2013. 
+
+
+```{r}
+flights
+```
+
+<div class="alert alert-success">
+  <strong>What can we learn about the data from the above printout?</strong> 
+  
+  * How many observations?
+  * What type of variable is `day` _in this dataframe/tibble_?
+</div>
+
+
+## Introduction to `dplyr`
+
+`dplyr` is a very powerful tool for data manipulation. However, much of its power comes from just 5 functions: 
+
+1. `filter()`
+2. `arrange()`
+3. `select()`
+4. `mutate()`
+5. `summarise()`
+
+### `filter()`
+
+```{r}
+filter(flights, month == 1, day == 1)
+```
+
+```{r}
+jan1 <- filter(flights, month == 1, day == 1)
+```
+
+
+```{r}
+(dec25 <- filter(flights, month == 12, day == 25))
+```
+
+
+
+<div class="alert alert-success">
+  * <strong>Create a tibble that contains only February flights,</strong> 
+</div>
+
+  
+```{r}
+
+```
+  
+
+
+
+#### Comparisons 
+
+* Equal: ==
+* Not equal: !=
+* Less than: <
+* Less than or equal to: <=
+
+<div class="alert alert-success">
+<strong>What are some others?</strong>
+
+* Greater than: ?
+* Greater than or equal to: ?
+
+</div>
+
+#### Logical Operators 
+
+* And: &
+* Or: |
+<br><br>
+<img src="https://d33wubrfki0l68.cloudfront.net/01f4b6d39d2be8269740a3ad7946faa79f7243cf/8369a/diagrams/transform-logical.png" alt="Complete set of boolean operations. `x` is the left-hand circle, `y` is the right-hand circle, and the shaded region show which parts each operator selects."/>
+
+<br><br>
+
+<div class="alert alert-success">
+  <strong>What does the following code do?</strong> 
+</div>
+
+```{r}
+filter(flights, month == 11 | month == 12)
+```
+
+
+* in: %in%
+
+```{r}
+nov_dec <- filter(flights, month %in% c(11, 12))
+```
+
+<div class="alert alert-success">
+  <strong>If you wanted to find flights that weren’t delayed (on arrival or departure) by more than two hours, what would you do?</strong> 
+</div>
+
+```{r}
+# arrival delay: arr_delay
+# departure delay: dep_delay
+filter(flights, )
+filter(flights, )
+```
+
+### `NA` values
+
+Missing values are represented by NA. Most operations involving missing values will return...missing values!
+
+```{r}
+NA==NA
+```
+<br>
+
+If you want to determine whether a value is missing or not, use `is.na()`:
+
+```{r}
+x <- NA
+
+is.na(x)
+
+x <- c(rep(0, times= 10), NA, 'A', NA, 8:12)
+x
+is.na(x)
+```
+
+Filter excludes `NA` values! If you want to include them, you need to do so explicitly: 
+
+```{r, results=F}
+df <- tibble(x = c(1, NA, 3))
+filter(df, x > 1)
+#> # A tibble: 1 x 1
+#>       x
+#>   <dbl>
+#> 1     3
+filter(df, is.na(x) | x > 1)
+#> # A tibble: 2 x 1
+#>       x
+#>   <dbl>
+#> 1    NA
+#> 2     3
+```
+
+
+### `arrange()`
+
+You can arrange a dataframe/tibble using the `arrange` function:
+
+```{r}
+arrange(flights, year, month, day)
+```
+
+To arrange by descending order, you need to use the `desc` function within arrange: 
+
+```{r}
+arrange(flights, desc(dep_delay))
+
+```
+
+### `select()`
+
+You can use the `select()` function to select specific columns from a dataframe/tibble: 
+
+```{r}
+select(flights, year, month, day)
+```
+
+
+Sometimes, you might need to see the names in your dataframe in order to select the columns you need: 
+
+```{r}
+names(flights)
+```
+
+```{r}
+# Select all columns between year and day (inclusive)
+select(flights, year:day)
+
+# Select all columns except those from year to day (inclusive)
+select(flights, -(year:day))
+```
+
+* `starts_with("abc")`: matches names that begin with “abc”.
+
+* `ends_with("xyz")`: matches names that end with “xyz”.
+
+* `contains("ijk")`: matches names that contain “ijk”.
+
+* `matches("(.)\\1")`: selects variables that match a regular expression. This one matches any variables that contain repeated characters. You’ll learn more about regular expressions in strings.
+
+* `num_range("x", 1:3)`: matches x1, x2 and x3.
+
+
+<br><br>
+
+<div class="alert alert-info">
+  <strong>Help!</strong> 
+  
+  If you need more information about a function, you can use ?. To learn more about `select()`, you could run: `?select`. 
+  
+  If you want information about a function that is in a package that _you have not loaded_, you can use ??`function` (e.g. ??select). This is useful for finding a function when you can't remember it's package!
+</div>
+
+
+<br><br> 
+
+
+<div class="alert alert-success">
+  * <strong>Create a tibble that uses `contains()` to select columns.</strong> 
+</div>
+
+```{r}
+
+```
+
+
+### `rename()`
+
+Sometimes you might want to rename a column. For this, you can use `rename()`. 
+
+```{r}
+rename(flights, tail_num = tailnum)
+```
+
+<br><br>
+
+However, you can also rename columns within a `select()` call: 
+
+```{r}
+select(flights, tail_num = tailnum, month, day)
+```
+
+
+### `mutate()`
+
+Often, you will want to add new variables to your dataframe. For this, you can use `mutate()`: 
+
+```{r}
+flights_sml <- select(flights, 
+  year:day, 
+  ends_with("delay"), 
+  distance, 
+  air_time
+)
+mutate(flights_sml,
+  gain = dep_delay - arr_delay,
+  speed = distance / air_time * 60
+)
+```
+
+
+You can use mutated columns in a mutate call after (in order): 
+
+```{r}
+mutate(flights_sml,
+  gain = dep_delay - arr_delay,
+  hours = air_time / 60,
+  gain_per_hour = gain / hours
+)
+```
+
+If you only want to keep mutated variables, you can use `transmute()`.
+
+```{r}
+transmute(flights,
+  gain = dep_delay - arr_delay,
+  hours = air_time / 60,
+  gain_per_hour = gain / hours
+)
+```
+
+
+### `summarise()`
+
+Another common operation is `summarise()`. It is like mutate, but in addition to creating new columns, it collapses a dataframe into a single row according to the specified function(s): 
+
+```{r}
+summarise(flights, delay = mean(dep_delay, na.rm = TRUE))
+```
+
+<br><br>
+
+`summarise()` is particularly useful when paired with `group_by()`:
+
+```{r}
+by_day <- group_by(flights, year, month, day)
+summarise(by_day, delay = mean(dep_delay, na.rm = TRUE))
+```
+
+
+### Chaining operations:
+
+A major strength of `dplyr` is that it supports chained operations, via the so-called _pipe_ operator, `%>%`:
+
+```{r}
+delay <- flights %>% 
+  group_by(dest) %>% 
+  summarise(
+    count = n(),
+    dist = mean(distance, na.rm = TRUE),
+    delay = mean(arr_delay, na.rm = TRUE)
+  ) %>% 
+  filter(count > 20, dest != "HNL")
+```
+
+
+```{r}
+# Just for fun
+ggplot(data = delay, mapping = aes(x = dist, y = delay)) +
+  geom_point(aes(size = count), alpha = 1/3) +
+  geom_smooth(se = FALSE)
+```
+
+
+### Dealing with missing values: 
+
+```{r}
+flights %>% 
+  group_by(year, month, day) %>% 
+  summarise(mean = mean(dep_delay))
+```
+
+
+<div class="alert alert-success">
+  <strong>What happened?</strong> 
+</div>
+
+<br><br>
+
+```{r}
+flights %>% 
+  group_by(year, month, day) %>% 
+  summarise(mean = mean(dep_delay, na.rm = TRUE))
+```
+
+
+### But, what's the _N_?
+
+Let's look at the _average_ arrival delays (`arr_delay`) delays for each plane: 
+
+```{r}
+
+not_cancelled <- flights %>% 
+  filter(!is.na(dep_delay), !is.na(arr_delay))
+
+
+delays <- not_cancelled %>%
+  group_by(tailnum) %>% 
+  summarise(
+    delay = mean(arr_delay)
+  )
+
+ggplot(data = delays, mapping = aes(x = delay)) + 
+  geom_freqpoly(binwidth = 10)
+```
+
+
+<div class="alert alert-success">
+  <strong>What does this plot tell us?</strong> 
+</div>
+
+
+<br><br>
+
+```{r}
+delays <- not_cancelled %>% 
+  group_by(tailnum) %>% 
+  summarise(
+    delay = mean(arr_delay, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(data = delays, mapping = aes(x = n, y = delay)) + 
+  geom_point(alpha = 1/10)
+```
+
+
+<div class="alert alert-success">
+  * <strong>What does this plot tell us?</strong> 
+  * <strong>What could we do to better examine any better trends?</strong>
+</div>
+
+
+```{r}
+delays %>% 
+  filter(n > 25) %>% 
+  ggplot(mapping = aes(x = n, y = delay)) + 
+    geom_point(alpha = 1/10)
+```
+
+### Let's look at something different (baseball)
+
+
+<div class="alert alert-success">
+  * <strong>What is the relationship between batting average and opportunities to hit the ball?</strong> 
+</div>
+
+
+```{r}
+# Convert to a tibble so it prints nicely
+
+p_load(Lahman)
+
+batting <- as_tibble(Lahman::Batting)
+
+batters <- batting %>% 
+  group_by(playerID) %>% 
+  summarise(
+    ba = sum(H, na.rm = TRUE) / sum(AB, na.rm = TRUE),
+    ab = sum(AB, na.rm = TRUE)
+  )
+
+batters %>% 
+  filter(ab > 100) %>% 
+  ggplot(mapping = aes(x = ab, y = ba)) +
+    geom_point() + 
+    geom_smooth(se = FALSE)
+```
+

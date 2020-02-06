@@ -1,0 +1,189 @@
+---
+title: "Psyc 499: Text as Data"
+subtitle: "NLP with Neural Networks"
+author: "Joe Hoover"
+date: "02.28.19 - Week 9 Lab"
+output:
+  html_notebook:
+    toc: true
+---
+
+
+```{r, message=F, results='hide'}
+library(tidyverse)
+
+if(require(knitr) == F) {
+  install.packages('knitr')
+  require('knitr')
+}
+
+if(require(textclean) == F) {
+  install.packages('textclean')
+  require('textclean')
+}
+require(textclean)
+
+
+library(keras)
+
+
+```
+
+
+
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(purrr)
+library(readr)
+
+
+
+get_imdb <- function(path){
+  
+  path = "./imbd_data/aclImdb/train/pos/"
+  
+  fns <- list.files(path = "./imbd_data/aclImdb/train/pos/",
+                            pattern = ".txt$")
+  
+  out <- fns %>%
+    map_chr(~ read_file(file.path(path,.))) %>% 
+        tibble(text = .)
+  
+}
+
+train_pos <- get_imdb("./imbd_data/aclImdb/train/pos/") 
+train_neg <- get_imdb("./imbd_data/aclImdb/train/neg/")
+
+train_text.df <- rbind(train_pos, train_neg) %>% 
+  mutate(y = c(rep(1, nrow(train_pos)), rep(0, nrow(train_neg))),
+         text = replace_html(text, symbol = F), 
+         text = gsub("([[:punct:]])", "", text),
+         text = gsub("\\", "", text, fixed=T)) %>%
+  sample_frac(1)
+
+test_pos <- get_imdb("./imbd_data/aclImdb/test/pos/")
+test_neg <- get_imdb("./imbd_data/aclImdb/test/neg/")
+test_text <- rbind(test_pos, test_neg)
+
+test_text.df <- rbind(test_pos, test_neg) %>% 
+  mutate(y = c(rep(1, nrow(test_pos)), rep(0, nrow(test_neg))),
+         text = replace_html(text, symbol = F), 
+         text = gsub("([[:punct:]])", "", text),
+         text = gsub("\\", "", text, fixed=T)) %>%
+  sample_frac(1)
+
+```
+
+```{r}
+train_text.df$y[[1]]
+cat(train_text.df$text[[1]])
+```
+
+
+
+```{r}
+
+train_docs <- train_text.df$text
+max_features <- 10000
+tokenizer <- text_tokenizer(num_words = max_features)
+
+tokenizer %>% 
+  fit_text_tokenizer(train_docs)
+```
+
+
+```{r}
+tokenizer$document_count
+```
+
+
+```{r}
+tokenizer$word_index %>%
+  head()
+```
+
+
+
+```{r}
+text_seqs <- texts_to_sequences(tokenizer, train_docs)
+text_seqs[1]
+```
+
+
+```{r}
+
+maxlen = 500
+
+x_train <- pad_sequences(
+  text_seqs,
+  padding = "post",
+  maxlen = 256
+)
+
+# x_train <- text_seqs %>%
+#   pad_sequences(maxlen = maxlen)
+
+dim(x_train)
+```
+
+```{r}
+y_train <- as.integer(train_text.df$y)
+```
+
+
+```{r}
+
+model <- keras_model_sequential() %>% 
+  layer_embedding(max_features, 50, input_length = 256) %>%
+  layer_global_average_pooling_1d() %>%
+  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+```
+
+
+```{r}
+
+model %>% compile(
+  optimizer = "adam",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+
+```
+
+```{r}
+
+val_indices <- 1:10000
+
+x_val <- x_train[val_indices,]
+partial_x_train <- x_train[-val_indices,]
+
+y_val <- y_train[val_indices]
+partial_y_train <- y_train[-val_indices]
+```
+
+
+```{r}
+history <- model %>% fit(
+  partial_x_train,
+  partial_y_train,
+  epochs = 100,
+  batch_size = 512,
+  validation_data = list(x_val, y_val)
+)
+
+
+```
+
+
+
+```{r}
+plot(history)
+```
+
+
+
+

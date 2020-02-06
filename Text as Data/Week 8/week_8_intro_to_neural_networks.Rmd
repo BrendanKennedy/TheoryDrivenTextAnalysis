@@ -1,0 +1,315 @@
+---
+title: "Psyc 499: Text as Data"
+subtitle: "Introduction to Neural Networks"
+author: "Joe Hoover"
+date: "02.28.19 - Week 8 Lab"
+output:
+  html_notebook:
+    toc: true
+---
+
+
+```{r, message=F, results='hide'}
+library(tidyverse)
+
+if(require(knitr) == F) {
+  install.packages('knitr')
+  require('knitr')
+}
+# 
+# if(require(kerasR) == F) {
+#   install.packages('kerasR')
+#   require('kerasR')
+# }
+```
+
+## Introduction to the Perceptron 
+
+### Learning the AND function
+
+
+First, let's define our input matrix $\boldsymbol{X}_{ij}$, which contains $N$ observations for $J$ features $\forall i \in {1,...,N}$ where $N = 4$ and $\forall j \in {1,...,J}$ where $J = 2$. 
+
+```{r, results='asis'}
+
+X <- as.matrix(tibble(x0 = c(1,1,1,1), x1 = c(0,0,1,1), x2 = c(0,1,0,1)))
+
+as_tibble(X)
+```
+
+```{r}
+R <- as.matrix(tibble(r = c(0, 0, 0, 1)))
+as_tibble(R)
+```
+
+
+```{r}
+W <- as.matrix(tibble(w0 = -1.5, w1 = 1, w2 = 1))
+as_tibble(W)
+```
+
+
+```{r}
+cat(' Dimensions of X: ', dim(X), '\n', 'Dimensions of W: ', dim(W))
+```
+
+* What dimensions should our output matrix have?
+
+```{r}
+X %*% t(W)
+
+W %*% t(X)
+```
+
+
+
+## Introduction to Keras
+
+### Installing Keras
+```{r, echo=T, message=F, results='hide'}
+if(require('keras') == F) {
+  install.packages('keras')
+  require('keras')
+}
+```
+
+
+### Installing TensorFlow 
+
+* https://blog.rstudio.com/2017/09/05/keras-for-r/
+* https://tensorflow.rstudio.com/tensorflow/articles/installation.html
+* https://towardsdatascience.com/tensorflow-gpu-installation-made-easy-use-conda-instead-of-pip-52e5249374bc
+
+```{r}
+library(keras)
+```
+
+If you do not have TensorFlow installed, you can use the function `install_keras()` to install it. 
+
+```{r}
+#install_keras()
+
+# For GPU installation
+#install_keras(method = 'conda', tensorflow='gpu')
+
+
+```
+
+
+**Using a version of TensorFlow installed in an Anaconda env: 
+
+```{r}
+use_condaenv('r-tensorflow')
+```
+
+
+**Test TensorFlow installation & link**
+
+```{r}
+library(keras)
+```
+
+
+
+First, we need to define the structure of our model. 
+
+1. Initialize the model
+
+```{r}
+
+# Initialize the model 
+
+model <- keras_model_sequential()
+
+```
+
+
+`keras_model_sequential()` is a class of model structures that consist of a linear stack of layers.
+
+2. Define the model structure
+
+```{r}
+
+model %>%
+  layer_dense(units=1, input_shape = 2) %>%
+  layer_activation('sigmoid')
+
+model
+```
+
+
+**What is the structure of this  model?**
+
+
+Now, we need to specify how we want to train the model:
+1. What loss function should we use?
+2. What optimizer should we use?
+3. What metrics do we want to track during training?
+
+#### Loss Functions
+
+For any statistical learning problem (including training NNs) that relies on optimization, we need to pick a **loss function**. The loss function is some function of the differences between our model's predictions and the observations in the training data. 
+
+The goal of model optimization is to *minimize* the loss function (i.e. minimize error). 
+
+Accordingly, it is important to choose a loss function that is suitable for the task at hand. 
+
+In our case, the task at hand is binary classification. **For a given data point, we need to choose either 0 or 1, based on the output of our final layer.**
+
+For this problem, we'll use binary cross-entropy. 
+
+<img src="https://cdn-images-1.medium.com/max/1440/1*PK0iVgkQepmVCprtTgbsGg.png">
+
+where y is the label and p(y) is the predicted probability of the point being 1 for all N points.
+
+You can read more about loss functions here: 
+https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/
+
+You can read about the loss functions available in Keras here: https://keras.io/losses/
+
+
+#### Optimizers 
+
+Now we need to choose how we will train our model:
+
+* Learn weights that minimize the specified loss function
+
+We'll use stochastic gradient descent (sgd). 
+
+You can read about Keras's other optimizers here: 
+https://keras.io/optimizers/
+
+
+#### Metrics
+
+We also will specify what metrics we want to track during training. A metric, in this context, is a function used to evaluate the performance of a model. 
+
+You can read about the metrics available in Keras here: 
+https://keras.io/metrics/
+
+We will track accuracy.  
+
+```{r}
+
+model %>% 
+  compile(
+    loss = 'binary_crossentropy',
+    optimizer = 'sgd',
+    metrics = c('accuracy')
+    )
+
+```
+
+
+### Setup data
+
+Keras automatically adds a bias term, so we need to drop that bias feature from X. 
+
+We also need to make sure that the data structure matches the specified model structure. 
+
+
+```{r}
+
+train_x <- array(X[,-1], dim = c(4, 2))
+train_y <- array(R, dim = c(4,1))
+
+```
+
+
+```{r}
+#fitting the model on the training dataset
+model %>% fit(train_x, train_y, epochs = 500, batch_size = 4)
+
+```
+
+```{r, results='asis'}
+
+#Evaluating model on the cross validation dataset
+loss_and_metrics <- model %>% evaluate(train_x, train_y, batch_size = 4)
+loss_and_metrics
+```
+
+### Learning OR
+
+
+```{r}
+
+xor_R <- as.matrix(tibble(r = c(0, 1, 1, 0)))
+
+```
+
+
+
+```{r}
+
+# Initialize the model 
+
+xor_model <- keras_model_sequential()
+
+xor_model %>%
+  layer_dense(units=1, input_shape = 2) %>%
+  layer_activation('sigmoid')
+
+xor_model %>% 
+  compile(
+    loss = 'binary_crossentropy',
+    optimizer = 'sgd',
+    metrics = c('accuracy')
+    )
+
+```
+
+
+```{r}
+
+xor_train_y <- array(xor_R, dim = c(4,1))
+
+```
+
+
+```{r}
+xor_model %>% fit(train_x, xor_train_y, epochs = 500, batch_size = 4)
+
+```
+
+
+#### Adding another layer
+
+
+```{r}
+
+# Initialize the model 
+
+xor_model2 <- keras_model_sequential()
+
+xor_model2 %>%
+  layer_dense(units=2, input_shape = 2) %>%
+  layer_activation('tanh') %>%
+  layer_dense(units=1, input_shape = 2) %>%
+  layer_activation('sigmoid')
+
+xor_model2 %>% 
+  compile(
+    loss = 'binary_crossentropy',
+    optimizer = 'sgd',
+    metrics = c('accuracy')
+    )
+
+xor_model2
+```
+
+
+```{r}
+
+xor_train_y <- array(xor_R, dim = c(4,1))
+
+```
+
+
+```{r}
+xor_model2 %>% fit(train_x, xor_train_y, epochs = 5000, batch_size = 1)
+
+```
+
+
+
