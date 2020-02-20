@@ -1,0 +1,205 @@
+---
+title: "Theory Driven Text Analysis Workshop"
+subtitle: "Text Pre-processing\n\nSPSP 2020"
+author: 
+  name: "Joe Hoover & Brendan Kennedy"
+  email: "joseph.hoover@kellogg.northwestern.edu\n\nbtkenned@usc.edu"
+output:
+  html_notebook:
+    toc: yes
+---
+
+
+# Workshop Data
+
+Throughout this workshop, we will be working with a collection of United States Congressional speeches from the House. This data is stored in JSONL format.
+
+It is stored in the file: `./data/house_data.json`
+
+
+# Loading data
+
+```{r, echo=F, message=F, warning=F}
+# Define chunk options
+knitr::opts_chunk$set(echo=F, message=F, warning=F)
+```
+
+```{r, message=F,  echo=F}
+# Load packages 
+library(pacman)
+p_load(readr, dplyr, tidyr, ggplot2, pmr, jtools, knitr, reshape2, jsonlite, 
+       lubridate)
+
+```
+
+
+Text data can be stored in many formats:
+
+* CSV
+* Separate files (e.g. txt) for each "document"
+* A single txt with documents newline delimited 
+* JSON
+* JSONL/NDJSON
+* XML
+* ...
+
+
+With this much variation, the first challenge of text analysis is often figuring out how to load your data! Sometimes you know the format a priori, which simplifies the task. However, other times you might not know the format. In those instances, it's useful to take a glance at the raw data. 
+
+
+We can do that with the `readLines` function: 
+
+
+```{r, echo=T}
+readLines('data/house_merged.json', n=1)
+
+```
+
+<br>
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> Any idea what format this data is?
+</div>
+
+
+
+## JSON formatted data
+
+### JSON
+
+JSON is a data storage format that is widely used for storing text data. It has the following characteristics:
+
+* Data is in name/value pairs
+* Data is separated by commas
+* Curly braces ("{" and "}") hold objects
+
+For example, 
+
+```{r, eval=F, echo=T}
+
+# JSON eg 1
+{'name': 'joe',
+ 'city': 'chicago'
+} 
+
+
+#JSON eg 2
+{'name': c('joe', 'brendan'),
+ 'city': c('chicago', 'los angeles')
+}
+```
+
+### JSONL/NDJSON
+
+Often, a collection of data or a corpus of text is stored in multiple JSON objects that are delimited by a newline. For intsance, a corpus of 100 documents might be stored in a file with 100 json objects, one for each document, delimited by a new line. Data with this format is usually referred to as JSONL (e.g. JSON lines) or NDJSON (e.g. new line delimited JSON). 
+
+For example, a file containing the json objects below would be a JSONL format data object:
+
+```{r, eval=F, echo=T}
+
+# JSON eg 1
+{'name': 'joe', 'city': 'chicago', 'text': 'Hi'} 
+{'name': 'brendan', 'city': 'los angeles', 'text': 'Howdy'} 
+
+```
+
+
+## Loading Workshop Data
+
+Our data has a JSONL format. To load it, we will use the `stream_in` function from the `jsonlite` package. Specifically, we'll provide a file connection to our data file as the first argument to `stream_in`. 
+
+The `stream_in` function will read the JSONL file and store it in an R data.frame object.
+
+
+```{r, echo=T,message=F}
+dh <- stream_in(file("data/house_merged.json"))
+
+```
+
+## Processing Workshop Data
+
+First, let's try to get an idea of how the data is structured. 
+
+```{r}
+str(dh)
+```
+
+
+```{r}
+summary(dh)
+```
+
+
+```{r}
+cat(paste('Speaker: ', dh$speaker[1], '\n\nSegment: ', dh$segment[1], sep=''))
+```
+
+#### Data Formatting
+
+
+First, let's deal with the date field: 
+
+```{r}
+head(dh$date)
+```
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What format is this data?
+</div>
+
+We can use the `as_date` function from the `lubridate` package to convert the UNIX timestamps to human-readable date objects:
+
+```{r}
+dhp <- dh %>%
+  mutate(date = lubridate::as_datetime(date))
+
+head(dhp$date)
+```
+
+Wait...what's going on here? Obviously this isn't correct. What do we do?
+
+Well, fortunately, each observation is associated with a URL. So, we can at least get check the correct date for the first record: 
+
+```{r}
+dh$url[1]
+```
+
+"https://www.congress.gov//congressional-record/1997/04/08/house-section/article/H1296-4"
+
+It looks like the correct date for the first is April 08, 1997. With that information, we can figure out what the timestamp *should* be (roughly):
+
+```{r}
+should_be = as.numeric(as.POSIXct("1997-04-08", format="%Y-%m-%d"))
+is = dh$date[1]
+
+cat(paste('Should be: ', should_be, ' (Digits = ', nchar(should_be),')\n', 
+          'Is: ', is, ' (Digits = ', nchar(is),')\n', sep=''))
+```
+
+It looks like we're off by about three orders of magnitude. If we fix this, do we get the right date?
+
+```{r}
+as_datetime(is/1000)
+```
+
+Let's try this for all the data and hand check a few cases:
+
+```{r}
+dhp <- dh %>%
+  mutate(date = lubridate::as_datetime(date/1000))
+
+dhp %>% select(date, url) %>% head()
+```
+
+
+```{r}
+dhp %>%
+  filter(date >= as_datetime('1998-6-01') & date <= as_datetime('1999-07-01')) %>%
+  mutate(month = month(date),
+         year = year(date)) %>% 
+  tally() %>%
+  View()
+  
+```
+

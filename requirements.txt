@@ -1,0 +1,8 @@
+readr
+dplyr
+tidyr
+ggplot2
+pmr
+jtools
+knitr
+reshape2
