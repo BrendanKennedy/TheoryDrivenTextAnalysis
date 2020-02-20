@@ -28,7 +28,7 @@ knitr::opts_chunk$set(echo=F, message=F, warning=F)
 # Load packages 
 library(pacman)
 p_load(readr, dplyr, tidyr, ggplot2, pmr, jtools, knitr, reshape2, jsonlite, 
-       lubridate, stringr)
+       lubridate, stringr, tidytext)
 
 ```
 
@@ -116,7 +116,7 @@ dh <- stream_in(file("../data/tdta_house_data.json"))
 
 ```
 
-## Processing Workshop Data
+# Processing Workshop Data
 
 First, let's try to get an idea of how the data is structured. 
 
@@ -134,7 +134,7 @@ summary(dh)
 cat(paste('Speaker: ', dh$speaker[1], '\n\nSegment: ', dh$segment[1], sep=''))
 ```
 
-#### Date Formatting
+### Date Formatting
 
 
 First, let's deal with the date field: 
@@ -195,9 +195,9 @@ dhp <- dh %>%
 dhp %>% select(date, url) %>% head()
 ```
 
-### Text Pre-processing
+## Text Pre-processing
 
-#### Regex
+### Regex
 
 Next, we'll start to clean up our text data, which is contained in the `segments` field. First, let's look at a random document and see what we might need to clean:
 
@@ -276,16 +276,233 @@ dhp <- dhp %>%
 substr(dhp$text[c(1:3, 400:403, 20000, 20002)], 0, 50)
 ```
 
-### Save data
 
-Finally, let's dropped unnecessary columns and save our data:
+Finally, if you look long enough, you'll notice quite a few HTML tags, like `<a href=\"billNUMth-congresshouse-billNUM\">`. Let's go ahead and remove those:
+
+
+```{r, echo=T}
+dhp <- dhp %>%
+  mutate(text = gsub('<.*?>', '', text))
+```
+
+### `tidytext`
+
+The notion of *tidy* data is quite popular among R users. 
+
+Generally, there are three rules for tidy data:
+
+1. Each variable must have its own column.
+2. Each observation must have its own row.
+3. Each value must have its own cell.
+
+How might these rules apply to text data? 
+
+
+<div class="alert alert-danger">
+  <strong>Problem</strong>  What do you think _tidy_ text is? Try to write down text-relevant versions of the three tidytext rules.
+</div>
+
+1. 
+2. 
+3. 
+
+#### Converting documents into tidytext format
+
+We can convert our data to tidytext format using the `unnest_tokens` function. First, let's go ahead and drop unnecessary columns and save our data: 
+
+```{r}
+dhp <- dhp %>%
+  select(-segment, -url, -raw_date, -session) 
+
+dhp %>%
+  saveRDS('../data/tdta_clean_house_data.RDS')
+```
+
+Now, let's create a new dataframe with tidy text data using words as units.
+
+```{r, echo=T}
+dat_tt_words <- dhp %>%
+  unnest_tokens(word, text, token='words')
+
+```
+
+
+```{r}
+dat_tt_words %>%
+  select(speaker, word) %>% 
+  head(8)
+
+```
+
+```{r}
+print(substr(dhp$text[1],0, 50))
+```
+
+By converting our data to tidytext format, we have access to each word in a document *and* we can operate on them using standard tidyverse functions. Specifically:
+
+
+* Now, each row corresponds to a word within a document
+* Punctuation is automatically stripped
+* Uppercase characters are lowered. 
+
+As you'll see in the next module, this is particularly useful for dictionary-based analyses. But for now, let's try to get a handle on some of the basic characteristics of our data:
+
+### Exploration and Visualization
+
+#### Words across time
+
+First, we'll look at word frequencies across time.
+
+
+```{r}
+dat_tt_words %>%
+  group_by(date) %>%
+  tally() %>%
+  ggplot(aes(x = date, y = n/1000)) +
+  geom_line() +
+  theme_apa() +
+  ggtitle('House Speech Word Count by Day') + 
+  ylab('1k Words')
+```
+
+We can also look at word frequencies by time and party:
+
+```{r}
+
+dat_tt_words %>%
+  group_by(date, Party) %>%
+  tally() %>%
+  ggplot(aes(x = date, y = n/1000)) +
+  geom_line() +
+  theme_apa() +
+  ggtitle('House Speech Word Count by Day and Party') + 
+  ylab('1k Words') + facet_wrap(Party~., ncol=1)
+
+```
+
+
+#### Top words
+
+We can (and you always should) also glance at the word distributions. E.g., what are the top words?
+
+```{r, echo=T}
+dat_tt_words %>%
+  count(word, sort = TRUE) %>%
+  top_n(15, wt=n) %>%
+  mutate(n = n/1000,
+    word = reorder(word, n)) %>%
+  ggplot(aes(word, n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() + 
+  theme_apa() +
+  ggtitle('Top words')
+```
+
+Looking at the top words, it's clear that the most frequent words are words like 'the', and 'of'. Depending on the task at hand, you may or may not want to remove these kinds of words, which are referred to as *stop words*. 
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> When and why might you want to remove (or not remove) stop words?
+</div>
+
+
+We can easily remove stopwords using tidytext's stop_words dataset and an anti-join:
+
+```{r}
+head(stop_words)
+```
+
+
+```{r}
+
+dat_tt_words.cl <- dat_tt_words %>%
+  anti_join(stop_words) %>%
+  filter(word != 'num')
+
+```
+
+
+```{r, echo=T}
+dat_tt_words.cl %>%
+  count(word, sort = TRUE) %>%
+  top_n(15, wt=n) %>%
+  mutate(n = n/1000,
+    word = reorder(word, n)) %>%
+  ggplot(aes(word, n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() + 
+  theme_apa() +
+  ggtitle('Top words with stopwords removed')
+```
+
+
+
+```{r, echo=T}
+dat_tt_words.cl %>%
+  filter(Party != 'Independent') %>%
+  group_by(Party) %>%
+  count(word, sort = TRUE) %>%
+  top_n(15, wt=n) %>%
+  mutate(n = n/1000,
+    word = reorder(word, n)) %>%
+  ggplot(aes(reorder(word,n), n)) +
+  geom_col(position=position_dodge()) +
+  xlab(NULL) +
+  coord_flip() + 
+  theme_apa() +
+  ggtitle('Top words with stopwords removed by party') +
+  facet_wrap(Party~., ncol=1)
+```
+
+
+
+```{r, echo=T}
+dat_tt_words.cl %>%
+  filter(Party != 'Independent') %>%
+  group_by(Party) %>%
+  count(word, sort = TRUE) %>%
+  top_n(15, wt=n) %>%
+  mutate(n = n/1000,
+    word = reorder(word, n)) %>%
+  ggplot(aes(reorder(word,n), n)) +
+  geom_col(position=position_dodge()) +
+  xlab(NULL) +
+  coord_flip() + 
+  theme_apa() +
+  ggtitle('Top words with stopwords removed by party') +
+  facet_wrap(Party~., ncol=1)
+```
+
 
 
 
 ```{r}
-dhp %>%
-  select(-segment, url, raw_date, session) %>%
-  saveRDS('../data/tdta_clean_house_data.RDS')
+`%!in%` <- Negate(`%in%`)
+
+dat_tt_words.cl <- dat_tt_words.cl %>%
+  filter(word  %!in% c('gentleman', 'bill', 'time', 'committee', 'section', 'people', 'amendment', 'house', 'act', 'united', 'congress'))
+
 ```
+
+
+
+```{r, echo=T}
+dat_tt_words.cl %>%
+  filter(Party != 'Independent') %>%
+  group_by(Party) %>%
+  count(word, sort = TRUE) %>%
+  top_n(15, wt=n) %>%
+  mutate(n = n/1000,
+    word = reorder(word, n)) %>%
+  ggplot(aes(reorder(word,n), n)) +
+  geom_col(position=position_dodge()) +
+  xlab(NULL) +
+  coord_flip() + 
+  theme_apa() +
+  ggtitle('Top words with stopwords removed by party') +
+  facet_wrap(Party~., ncol=1)
+```
+
 
 
