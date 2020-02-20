@@ -1762,7 +1762,9 @@ SPSP 2020</h3>
 <li><a href="#jsonlndjson">JSONL/NDJSON</a></li>
 </ul></li>
 <li><a href="#loading-workshop-data">Loading Workshop Data</a></li>
-<li><a href="#processing-workshop-data">Processing Workshop Data</a></li>
+<li><a href="#processing-workshop-data">Processing Workshop Data</a><ul>
+<li><a href="#text-pre-processing">Text Pre-processing</a></li>
+</ul></li>
 </ul></li>
 </ul>
 </div>
@@ -1869,25 +1871,24 @@ SPSP 2020</h3>
 <p>First, let’s try to get an idea of how the data is structured.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-output-begin eyJkYXRhIjoiJ2RhdGEuZnJhbWUnOlx0MzU5NTkgb2JzLiBvZiAgMTEgdmFyaWFibGVzOlxuICQgc3BlYWtlciA6IGNociAgXCJNci4gR0VLQVMuXCIgXCJNci4gVkVOVE8uXCIgXCJNci4gTGFGQUxDRS5cIiBcIk1yLiBWRU5UTy5cIiAuLi5cbiAkIHNlZ21lbnQgOiBjaHIgIFwiIE1yLiBTcGVha2VyLCBlYXJsaWVyIHRvZGF5LCBPY3RvYmVyIDcsIDE5OTgsIEkgd2FzIFxcbnVuYXZvaWRhYmx5IGRldGFpbmVkIHdoaWxlIGRpc2N1c3NpbmcgdGhlIGNvbmZlcmVuY2UgY29tbVwifCBfX3RydW5jYXRlZF9fIFwiIE1yLiBTcGVha2VyLCBJIGhhdmUgdGFrZW4gdGhpcyBob3VyIHNwZWNpYWwgb3JkZXIgdGhpcyBcXG5ldmVuaW5nIHRvIGhpZ2hsaWdodCBhbiBpbXBvcnRhbnQgbGF3IGFuZCBhbiBpbXBvcnRhblwifCBfX3RydW5jYXRlZF9fIFwiIE1yLiBTcGVha2VyLCBJIHRoYW5rIHRoZSBnZW50bGVtYW4gZnJvbSBNaW5uZXNvdGEgdmVyeSBcXG5tdWNoIGZvciB5aWVsZGluZyB0byBtZS5cXG4gIE1yLiBTcGVha2VyLCBJIGFtIHNvIHBsZWFcInwgX190cnVuY2F0ZWRfXyBcIiBNci4gU3BlYWtlciwgSSB0aGFuayB0aGUgZ2VudGxlbWFuIGZyb20gTmV3IFlvcmsgKE1yLiBcXG5MYUZhbGNlKSBmb3IgaGlzIHN0cm9uZyBzdGF0ZW1lbnQsIHRoZSByYW5raW5nIG1lbWJlciBcInwgX190cnVuY2F0ZWRfXyAuLi5cbiAkIHVybCAgICAgOiBjaHIgIFwiaHR0cHM6Ly93d3cuY29uZ3Jlc3MuZ292Ly9jb25ncmVzc2lvbmFsLXJlY29yZC8xOTk4LzEwLzA3L2hvdXNlLXNlY3Rpb24vYXJ0aWNsZS9IOTg3MC0xXCIgXCJodHRwczovL3d3dy5jb25ncmVzcy5nb3YvL2NvbmdyZXNzaW9uYWwtcmVjb3JkLzE5OTkvMDYvMjMvaG91c2Utc2VjdGlvbi9hcnRpY2xlL0g0ODE1LTFcIiBcImh0dHBzOi8vd3d3LmNvbmdyZXNzLmdvdi8vY29uZ3Jlc3Npb25hbC1yZWNvcmQvMTk5OS8wNi8yMy9ob3VzZS1zZWN0aW9uL2FydGljbGUvSDQ4MTUtMVwiIFwiaHR0cHM6Ly93d3cuY29uZ3Jlc3MuZ292Ly9jb25ncmVzc2lvbmFsLXJlY29yZC8xOTk5LzA2LzIzL2hvdXNlLXNlY3Rpb24vYXJ0aWNsZS9INDgxNS0xXCIgLi4uXG4gJCBzZXNzaW9uIDogY2hyICBcIjxoND4xMDV0aCBDb25ncmVzcywgMm5kIFNlc3Npb248YnIvPklzc3VlOiBWb2wuIDE0NCwgTm8uIDEzOSDigJQgRGFpbHkgRWRpdGlvbjxcL2g0PlwiIFwiPGg0PjEwNnRoIENvbmdyZXNzLCAxc3QgU2Vzc2lvbjxici8+SXNzdWU6IFZvbC4gMTQ1LCBOby4gOTAg4oCUIERhaWx5IEVkaXRpb248XC9oND5cIiBcIjxoND4xMDZ0aCBDb25ncmVzcywgMXN0IFNlc3Npb248YnIvPklzc3VlOiBWb2wuIDE0NSwgTm8uIDkwIOKAlCBEYWlseSBFZGl0aW9uPFwvaDQ+XCIgXCI8aDQ+MTA2dGggQ29uZ3Jlc3MsIDFzdCBTZXNzaW9uPGJyLz5Jc3N1ZTogVm9sLiAxNDUsIE5vLiA5MCDigJQgRGFpbHkgRWRpdGlvbjxcL2g0PlwiIC4uLlxuICQgZGF0ZSAgICA6IGNociAgXCIxOTk4LTEwLTA3XCIgXCIxOTk5LTA2LTIzXCIgXCIxOTk5LTA2LTIzXCIgXCIxOTk5LTA2LTIzXCIgLi4uXG4gJCBkb2NfbnVtIDogaW50ICAyNzMgNjUyIDY1MyA2NTQgNjU1IDY1NiA2NTcgNjU4IDY1OSA2NjAgLi4uXG4gJCBTdGF0ZSAgIDogY2hyICBcIkNvbm5lY3RpY3V0XCIgXCJOZXcgWW9ya1wiIFwiSWRhaG9cIiBcIk5ldyBZb3JrXCIgLi4uXG4gJCBQYXJ0eSAgIDogY2hyICBcIkRlbW9jcmF0aWNcIiBcIkRlbW9jcmF0aWNcIiBcIlJlcHVibGljYW5cIiBcIkRlbW9jcmF0aWNcIiAuLi5cbiAkIE5hbWUgICAgOiBjaHIgIFwiR2VrYXMsIEdlb3JnZSBXLlwiIFwiVmVudG8sIEJydWNlIEYuXCIgXCJMYUZhbGNlLCBKb2huIEouXCIgXCJWZW50bywgQnJ1Y2UgRi5cIiAuLi5cbiAkIERpc3RyaWN0OiBjaHIgIFwiRGlzdHJpY3Q6IDJcIiBcIkRpc3RyaWN0OiA3XCIgXCJEaXN0cmljdDogMVwiIFwiRGlzdHJpY3Q6IDdcIiAuLi5cbiAkIHJhd19kYXRlOiBudW0gIDkuMDhlKzExIDkuMzBlKzExIDkuMzBlKzExIDkuMzBlKzExIDkuMzBlKzExIC4uLlxuIn0= -->
-<pre><code>'data.frame':   35959 obs. of  11 variables:
+<!-- rnb-output-begin eyJkYXRhIjoiJ2RhdGEuZnJhbWUnOlx0MzU5NTkgb2JzLiBvZiAgMTAgdmFyaWFibGVzOlxuICQgc3BlYWtlciA6IGNociAgXCJNci4gR0VLQVMuXCIgXCJNci4gVkVOVE8uXCIgXCJNci4gTGFGQUxDRS5cIiBcIk1yLiBWRU5UTy5cIiAuLi5cbiAkIHNlZ21lbnQgOiBjaHIgIFwiIE1yLiBTcGVha2VyLCBlYXJsaWVyIHRvZGF5LCBPY3RvYmVyIDcsIDE5OTgsIEkgd2FzIFxcbnVuYXZvaWRhYmx5IGRldGFpbmVkIHdoaWxlIGRpc2N1c3NpbmcgdGhlIGNvbmZlcmVuY2UgY29tbVwifCBfX3RydW5jYXRlZF9fIFwiIE1yLiBTcGVha2VyLCBJIGhhdmUgdGFrZW4gdGhpcyBob3VyIHNwZWNpYWwgb3JkZXIgdGhpcyBcXG5ldmVuaW5nIHRvIGhpZ2hsaWdodCBhbiBpbXBvcnRhbnQgbGF3IGFuZCBhbiBpbXBvcnRhblwifCBfX3RydW5jYXRlZF9fIFwiIE1yLiBTcGVha2VyLCBJIHRoYW5rIHRoZSBnZW50bGVtYW4gZnJvbSBNaW5uZXNvdGEgdmVyeSBcXG5tdWNoIGZvciB5aWVsZGluZyB0byBtZS5cXG4gIE1yLiBTcGVha2VyLCBJIGFtIHNvIHBsZWFcInwgX190cnVuY2F0ZWRfXyBcIiBNci4gU3BlYWtlciwgSSB0aGFuayB0aGUgZ2VudGxlbWFuIGZyb20gTmV3IFlvcmsgKE1yLiBcXG5MYUZhbGNlKSBmb3IgaGlzIHN0cm9uZyBzdGF0ZW1lbnQsIHRoZSByYW5raW5nIG1lbWJlciBcInwgX190cnVuY2F0ZWRfXyAuLi5cbiAkIHVybCAgICAgOiBjaHIgIFwiaHR0cHM6Ly93d3cuY29uZ3Jlc3MuZ292Ly9jb25ncmVzc2lvbmFsLXJlY29yZC8xOTk4LzEwLzA3L2hvdXNlLXNlY3Rpb24vYXJ0aWNsZS9IOTg3MC0xXCIgXCJodHRwczovL3d3dy5jb25ncmVzcy5nb3YvL2NvbmdyZXNzaW9uYWwtcmVjb3JkLzE5OTkvMDYvMjMvaG91c2Utc2VjdGlvbi9hcnRpY2xlL0g0ODE1LTFcIiBcImh0dHBzOi8vd3d3LmNvbmdyZXNzLmdvdi8vY29uZ3Jlc3Npb25hbC1yZWNvcmQvMTk5OS8wNi8yMy9ob3VzZS1zZWN0aW9uL2FydGljbGUvSDQ4MTUtMVwiIFwiaHR0cHM6Ly93d3cuY29uZ3Jlc3MuZ292Ly9jb25ncmVzc2lvbmFsLXJlY29yZC8xOTk5LzA2LzIzL2hvdXNlLXNlY3Rpb24vYXJ0aWNsZS9INDgxNS0xXCIgLi4uXG4gJCBzZXNzaW9uIDogY2hyICBcIjxoND4xMDV0aCBDb25ncmVzcywgMm5kIFNlc3Npb248YnIvPklzc3VlOiBWb2wuIDE0NCwgTm8uIDEzOSDigJQgRGFpbHkgRWRpdGlvbjxcL2g0PlwiIFwiPGg0PjEwNnRoIENvbmdyZXNzLCAxc3QgU2Vzc2lvbjxici8+SXNzdWU6IFZvbC4gMTQ1LCBOby4gOTAg4oCUIERhaWx5IEVkaXRpb248XC9oND5cIiBcIjxoND4xMDZ0aCBDb25ncmVzcywgMXN0IFNlc3Npb248YnIvPklzc3VlOiBWb2wuIDE0NSwgTm8uIDkwIOKAlCBEYWlseSBFZGl0aW9uPFwvaDQ+XCIgXCI8aDQ+MTA2dGggQ29uZ3Jlc3MsIDFzdCBTZXNzaW9uPGJyLz5Jc3N1ZTogVm9sLiAxNDUsIE5vLiA5MCDigJQgRGFpbHkgRWRpdGlvbjxcL2g0PlwiIC4uLlxuICQgZG9jX251bSA6IGludCAgMjczIDY1MiA2NTMgNjU0IDY1NSA2NTYgNjU3IDY1OCA2NTkgNjYwIC4uLlxuICQgU3RhdGUgICA6IGNociAgXCJDb25uZWN0aWN1dFwiIFwiTmV3IFlvcmtcIiBcIklkYWhvXCIgXCJOZXcgWW9ya1wiIC4uLlxuICQgUGFydHkgICA6IGNociAgXCJEZW1vY3JhdGljXCIgXCJEZW1vY3JhdGljXCIgXCJSZXB1YmxpY2FuXCIgXCJEZW1vY3JhdGljXCIgLi4uXG4gJCBOYW1lICAgIDogY2hyICBcIkdla2FzLCBHZW9yZ2UgVy5cIiBcIlZlbnRvLCBCcnVjZSBGLlwiIFwiTGFGYWxjZSwgSm9obiBKLlwiIFwiVmVudG8sIEJydWNlIEYuXCIgLi4uXG4gJCBEaXN0cmljdDogY2hyICBcIkRpc3RyaWN0OiAyXCIgXCJEaXN0cmljdDogN1wiIFwiRGlzdHJpY3Q6IDFcIiBcIkRpc3RyaWN0OiA3XCIgLi4uXG4gJCBkYXRlICAgIDogbnVtICA5LjA4ZSsxMSA5LjMwZSsxMSA5LjMwZSsxMSA5LjMwZSsxMSA5LjMwZSsxMSAuLi5cbiJ9 -->
+<pre><code>'data.frame':   35959 obs. of  10 variables:
  $ speaker : chr  &quot;Mr. GEKAS.&quot; &quot;Mr. VENTO.&quot; &quot;Mr. LaFALCE.&quot; &quot;Mr. VENTO.&quot; ...
  $ segment : chr  &quot; Mr. Speaker, earlier today, October 7, 1998, I was \nunavoidably detained while discussing the conference comm&quot;| __truncated__ &quot; Mr. Speaker, I have taken this hour special order this \nevening to highlight an important law and an importan&quot;| __truncated__ &quot; Mr. Speaker, I thank the gentleman from Minnesota very \nmuch for yielding to me.\n  Mr. Speaker, I am so plea&quot;| __truncated__ &quot; Mr. Speaker, I thank the gentleman from New York (Mr. \nLaFalce) for his strong statement, the ranking member &quot;| __truncated__ ...
  $ url     : chr  &quot;https://www.congress.gov//congressional-record/1998/10/07/house-section/article/H9870-1&quot; &quot;https://www.congress.gov//congressional-record/1999/06/23/house-section/article/H4815-1&quot; &quot;https://www.congress.gov//congressional-record/1999/06/23/house-section/article/H4815-1&quot; &quot;https://www.congress.gov//congressional-record/1999/06/23/house-section/article/H4815-1&quot; ...
  $ session : chr  &quot;&lt;h4&gt;105th Congress, 2nd Session&lt;br/&gt;Issue: Vol. 144, No. 139 — Daily Edition&lt;/h4&gt;&quot; &quot;&lt;h4&gt;106th Congress, 1st Session&lt;br/&gt;Issue: Vol. 145, No. 90 — Daily Edition&lt;/h4&gt;&quot; &quot;&lt;h4&gt;106th Congress, 1st Session&lt;br/&gt;Issue: Vol. 145, No. 90 — Daily Edition&lt;/h4&gt;&quot; &quot;&lt;h4&gt;106th Congress, 1st Session&lt;br/&gt;Issue: Vol. 145, No. 90 — Daily Edition&lt;/h4&gt;&quot; ...
- $ date    : chr  &quot;1998-10-07&quot; &quot;1999-06-23&quot; &quot;1999-06-23&quot; &quot;1999-06-23&quot; ...
  $ doc_num : int  273 652 653 654 655 656 657 658 659 660 ...
  $ State   : chr  &quot;Connecticut&quot; &quot;New York&quot; &quot;Idaho&quot; &quot;New York&quot; ...
  $ Party   : chr  &quot;Democratic&quot; &quot;Democratic&quot; &quot;Republican&quot; &quot;Democratic&quot; ...
  $ Name    : chr  &quot;Gekas, George W.&quot; &quot;Vento, Bruce F.&quot; &quot;LaFalce, John J.&quot; &quot;Vento, Bruce F.&quot; ...
  $ District: chr  &quot;District: 2&quot; &quot;District: 7&quot; &quot;District: 1&quot; &quot;District: 7&quot; ...
- $ raw_date: num  9.08e+11 9.30e+11 9.30e+11 9.30e+11 9.30e+11 ...</code></pre>
+ $ date    : num  9.08e+11 9.30e+11 9.30e+11 9.30e+11 9.30e+11 ...</code></pre>
 <!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-output-begin eyJkYXRhIjoiICAgc3BlYWtlciAgICAgICAgICAgIHNlZ21lbnQgICAgICAgICAgICAgIHVybCAgICAgICAgICAgICAgc2Vzc2lvbiAgICAgICAgIFxuIExlbmd0aDozNTk1OSAgICAgICBMZW5ndGg6MzU5NTkgICAgICAgTGVuZ3RoOjM1OTU5ICAgICAgIExlbmd0aDozNTk1OSAgICAgIFxuIENsYXNzIDpjaGFyYWN0ZXIgICBDbGFzcyA6Y2hhcmFjdGVyICAgQ2xhc3MgOmNoYXJhY3RlciAgIENsYXNzIDpjaGFyYWN0ZXIgIFxuIE1vZGUgIDpjaGFyYWN0ZXIgICBNb2RlICA6Y2hhcmFjdGVyICAgTW9kZSAgOmNoYXJhY3RlciAgIE1vZGUgIDpjaGFyYWN0ZXIgIFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIFxuICAgICBkYXRlICAgICAgICAgICAgICBkb2NfbnVtICAgICAgICAgIFN0YXRlICAgICAgICAgICAgICBQYXJ0eSAgICAgICAgICBcbiBMZW5ndGg6MzU5NTkgICAgICAgTWluLiAgIDogICAyNzMgICBMZW5ndGg6MzU5NTkgICAgICAgTGVuZ3RoOjM1OTU5ICAgICAgXG4gQ2xhc3MgOmNoYXJhY3RlciAgIDFzdCBRdS46MTg1NjMwICAgQ2xhc3MgOmNoYXJhY3RlciAgIENsYXNzIDpjaGFyYWN0ZXIgIFxuIE1vZGUgIDpjaGFyYWN0ZXIgICBNZWRpYW4gOjM2MTYyMyAgIE1vZGUgIDpjaGFyYWN0ZXIgICBNb2RlICA6Y2hhcmFjdGVyICBcbiAgICAgICAgICAgICAgICAgICAgTWVhbiAgIDozODEwNzIgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgXG4gICAgICAgICAgICAgICAgICAgIDNyZCBRdS46NTg3MjgwICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIFxuICAgICAgICAgICAgICAgICAgICBNYXguICAgOjc4NzQ1OSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBcbiAgICAgTmFtZSAgICAgICAgICAgICBEaXN0cmljdCAgICAgICAgICAgIHJhd19kYXRlICAgICAgICBcbiBMZW5ndGg6MzU5NTkgICAgICAgTGVuZ3RoOjM1OTU5ICAgICAgIE1pbi4gICA6OC45NjhlKzExICBcbiBDbGFzcyA6Y2hhcmFjdGVyICAgQ2xhc3MgOmNoYXJhY3RlciAgIDFzdCBRdS46OS4wMTdlKzExICBcbiBNb2RlICA6Y2hhcmFjdGVyICAgTW9kZSAgOmNoYXJhY3RlciAgIE1lZGlhbiA6OS4wODJlKzExICBcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIE1lYW4gICA6OS4xMzBlKzExICBcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIDNyZCBRdS46OS4yNTNlKzExICBcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIE1heC4gICA6OS4zMDhlKzExICBcbiJ9 -->
+<!-- rnb-output-begin eyJkYXRhIjoiICAgc3BlYWtlciAgICAgICAgICAgIHNlZ21lbnQgICAgICAgICAgICAgIHVybCAgICAgICAgICAgICAgc2Vzc2lvbiAgICAgICAgIFxuIExlbmd0aDozNTk1OSAgICAgICBMZW5ndGg6MzU5NTkgICAgICAgTGVuZ3RoOjM1OTU5ICAgICAgIExlbmd0aDozNTk1OSAgICAgIFxuIENsYXNzIDpjaGFyYWN0ZXIgICBDbGFzcyA6Y2hhcmFjdGVyICAgQ2xhc3MgOmNoYXJhY3RlciAgIENsYXNzIDpjaGFyYWN0ZXIgIFxuIE1vZGUgIDpjaGFyYWN0ZXIgICBNb2RlICA6Y2hhcmFjdGVyICAgTW9kZSAgOmNoYXJhY3RlciAgIE1vZGUgIDpjaGFyYWN0ZXIgIFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIFxuICAgIGRvY19udW0gICAgICAgICAgU3RhdGUgICAgICAgICAgICAgIFBhcnR5ICAgICAgICAgICAgICAgTmFtZSAgICAgICAgICBcbiBNaW4uICAgOiAgIDI3MyAgIExlbmd0aDozNTk1OSAgICAgICBMZW5ndGg6MzU5NTkgICAgICAgTGVuZ3RoOjM1OTU5ICAgICAgXG4gMXN0IFF1LjoxODU2MzAgICBDbGFzcyA6Y2hhcmFjdGVyICAgQ2xhc3MgOmNoYXJhY3RlciAgIENsYXNzIDpjaGFyYWN0ZXIgIFxuIE1lZGlhbiA6MzYxNjIzICAgTW9kZSAgOmNoYXJhY3RlciAgIE1vZGUgIDpjaGFyYWN0ZXIgICBNb2RlICA6Y2hhcmFjdGVyICBcbiBNZWFuICAgOjM4MTA3MiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgXG4gM3JkIFF1Ljo1ODcyODAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIFxuIE1heC4gICA6Nzg3NDU5ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBcbiAgIERpc3RyaWN0ICAgICAgICAgICAgICBkYXRlICAgICAgICAgIFxuIExlbmd0aDozNTk1OSAgICAgICBNaW4uICAgOjguOTY4ZSsxMSAgXG4gQ2xhc3MgOmNoYXJhY3RlciAgIDFzdCBRdS46OS4wMTdlKzExICBcbiBNb2RlICA6Y2hhcmFjdGVyICAgTWVkaWFuIDo5LjA4MmUrMTEgIFxuICAgICAgICAgICAgICAgICAgICBNZWFuICAgOjkuMTMwZSsxMSAgXG4gICAgICAgICAgICAgICAgICAgIDNyZCBRdS46OS4yNTNlKzExICBcbiAgICAgICAgICAgICAgICAgICAgTWF4LiAgIDo5LjMwOGUrMTEgIFxuIn0= -->
 <pre><code>   speaker            segment              url              session         
  Length:35959       Length:35959       Length:35959       Length:35959      
  Class :character   Class :character   Class :character   Class :character  
@@ -1895,20 +1896,20 @@ SPSP 2020</h3>
                                                                             
                                                                             
                                                                             
-     date              doc_num          State              Party          
- Length:35959       Min.   :   273   Length:35959       Length:35959      
- Class :character   1st Qu.:185630   Class :character   Class :character  
- Mode  :character   Median :361623   Mode  :character   Mode  :character  
-                    Mean   :381072                                        
-                    3rd Qu.:587280                                        
-                    Max.   :787459                                        
-     Name             District            raw_date        
- Length:35959       Length:35959       Min.   :8.968e+11  
- Class :character   Class :character   1st Qu.:9.017e+11  
- Mode  :character   Mode  :character   Median :9.082e+11  
-                                       Mean   :9.130e+11  
-                                       3rd Qu.:9.253e+11  
-                                       Max.   :9.308e+11  </code></pre>
+    doc_num          State              Party               Name          
+ Min.   :   273   Length:35959       Length:35959       Length:35959      
+ 1st Qu.:185630   Class :character   Class :character   Class :character  
+ Median :361623   Mode  :character   Mode  :character   Mode  :character  
+ Mean   :381072                                                           
+ 3rd Qu.:587280                                                           
+ Max.   :787459                                                           
+   District              date          
+ Length:35959       Min.   :8.968e+11  
+ Class :character   1st Qu.:9.017e+11  
+ Mode  :character   Median :9.082e+11  
+                    Mean   :9.130e+11  
+                    3rd Qu.:9.253e+11  
+                    Max.   :9.308e+11  </code></pre>
 <!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
@@ -1928,11 +1929,14 @@ present, I would have voted ``aye'' on rollcall No. 489, to agree to
 <!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<div id="data-formatting" class="section level4">
-<h4>Data Formatting</h4>
+<div id="date-formatting" class="section level4">
+<h4>Date Formatting</h4>
 <p>First, let’s deal with the date field:</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIDkwNzcxODQwMDAwMCA5MzAwOTYwMDAwMDAgOTMwMDk2MDAwMDAwIDkzMDA5NjAwMDAwMCA5MzAwOTYwMDAwMDAgOTMwMDk2MDAwMDAwXG4ifQ== -->
+<pre><code>[1] 907718400000 930096000000 930096000000 930096000000 930096000000 930096000000</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <div class="alert alert-success" role="alert">
@@ -1941,30 +1945,110 @@ present, I would have voted ``aye'' on rollcall No. 489, to agree to
 <p>We can use the <code>as_date</code> function from the <code>lubridate</code> package to convert the UNIX timestamps to human-readable date objects:</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiMzA3MzQtMDYtMTUgVVRDXCIgXCIzMTQ0My0wNy0yOCBVVENcIiBcIjMxNDQzLTA3LTI4IFVUQ1wiIFwiMzE0NDMtMDctMjggVVRDXCJcbls1XSBcIjMxNDQzLTA3LTI4IFVUQ1wiIFwiMzE0NDMtMDctMjggVVRDXCJcbiJ9 -->
+<pre><code>[1] &quot;30734-06-15 UTC&quot; &quot;31443-07-28 UTC&quot; &quot;31443-07-28 UTC&quot; &quot;31443-07-28 UTC&quot;
+[5] &quot;31443-07-28 UTC&quot; &quot;31443-07-28 UTC&quot;</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>Wait…what’s going on here? Obviously this isn’t correct. What do we do?</p>
 <p>Well, fortunately, each observation is associated with a URL. So, we can at least get check the correct date for the first record:</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiaHR0cHM6Ly93d3cuY29uZ3Jlc3MuZ292Ly9jb25ncmVzc2lvbmFsLXJlY29yZC8xOTk4LzEwLzA3L2hvdXNlLXNlY3Rpb24vYXJ0aWNsZS9IOTg3MC0xXCJcbiJ9 -->
+<pre><code>[1] &quot;https://www.congress.gov//congressional-record/1998/10/07/house-section/article/H9870-1&quot;</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<p>“<a href="https://www.congress.gov//congressional-record/1997/04/08/house-section/article/H1296-4" class="uri">https://www.congress.gov//congressional-record/1997/04/08/house-section/article/H1296-4</a>”</p>
-<p>It looks like the correct date for the first is April 08, 1997. With that information, we can figure out what the timestamp <em>should</em> be (roughly):</p>
+<p>“<a href="https://www.congress.gov//congressional-record/1998/10/07/house-section/article/H9870-1" class="uri">https://www.congress.gov//congressional-record/1998/10/07/house-section/article/H9870-1</a>”</p>
+<p>It looks like the correct date for the first is October 07, 1998. With that information, we can figure out what the timestamp <em>should</em> be (roughly):</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
+<!-- rnb-output-begin eyJkYXRhIjoiU2hvdWxkIGJlOiA5MDc3MzY0MDAgKERpZ2l0cyA9IDkpXG5JczogOTA3NzE4NDAwMDAwIChEaWdpdHMgPSAxMilcbiJ9 -->
+<pre><code>Should be: 907736400 (Digits = 9)
+Is: 907718400000 (Digits = 12)</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>It looks like we’re off by about three orders of magnitude. If we fix this, do we get the right date?</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiMTk5OC0xMC0wNyBVVENcIlxuIn0= -->
+<pre><code>[1] &quot;1998-10-07 UTC&quot;</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>Let’s try this for all the data and hand check a few cases:</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
+<!-- rnb-frame-begin eyJtZXRhZGF0YSI6eyJjbGFzc2VzIjpbImRhdGEuZnJhbWUiXSwibmNvbCI6MiwibnJvdyI6Nn0sInJkZiI6IlVrUllNd3BZQ2dBQUFBTUFBd1lCQUFNRkFBQUFBQVZWVkVZdE9BQUFCQUlBQUFBQkFBUUFDUUFBQUFGNEFBQURFd0FBQUFJQUFBTU9BQUFBQmtITERWZUFBQUFBUWN1NEVjQUFBQUJCeTdnUndBQUFBRUhMdUJIQUFBQUFRY3U0RWNBQUFBQkJ5N2dSd0FBQUFBQUFCQUlBQUFBQkFBUUFDUUFBQUFWamJHRnpjd0FBQUJBQUFBQUNBQVFBQ1FBQUFBZFFUMU5KV0dOMEFBUUFDUUFBQUFaUVQxTkpXSFFBQUFRQ0FBQUFBUUFFQUFrQUFBQUZkSHB2Ym1VQUFBQVFBQUFBQVFBRUFBa0FBQUFEVlZSREFBQUEvZ0FBQUJBQUFBQUdBQVFBQ1FBQUFGZG9kSFJ3Y3pvdkwzZDNkeTVqYjI1bmNtVnpjeTVuYjNZdkwyTnZibWR5WlhOemFXOXVZV3d0Y21WamIzSmtMekU1T1Rndk1UQXZNRGN2YUc5MWMyVXRjMlZqZEdsdmJpOWhjblJwWTJ4bEwwZzVPRGN3TFRFQUJBQUpBQUFBVjJoMGRIQnpPaTh2ZDNkM0xtTnZibWR5WlhOekxtZHZkaTh2WTI5dVozSmxjM05wYjI1aGJDMXlaV052Y21Rdk1UazVPUzh3Tmk4eU15OW9iM1Z6WlMxelpXTjBhVzl1TDJGeWRHbGpiR1V2U0RRNE1UVXRNUUFFQUFrQUFBQlhhSFIwY0hNNkx5OTNkM2N1WTI5dVozSmxjM011WjI5Mkx5OWpiMjVuY21WemMybHZibUZzTFhKbFkyOXlaQzh4T1RrNUx6QTJMekl6TDJodmRYTmxMWE5sWTNScGIyNHZZWEowYVdOc1pTOUlORGd4TlMweEFBUUFDUUFBQUZkb2RIUndjem92TDNkM2R5NWpiMjVuY21WemN5NW5iM1l2TDJOdmJtZHlaWE56YVc5dVlXd3RjbVZqYjNKa0x6RTVPVGt2TURZdk1qTXZhRzkxYzJVdGMyVmpkR2x2Ymk5aGNuUnBZMnhsTDBnME9ERTFMVEVBQkFBSkFBQUFWMmgwZEhCek9pOHZkM2QzTG1OdmJtZHlaWE56TG1kdmRpOHZZMjl1WjNKbGMzTnBiMjVoYkMxeVpXTnZjbVF2TVRrNU9TOHdOaTh5TXk5b2IzVnpaUzF6WldOMGFXOXVMMkZ5ZEdsamJHVXZTRFE0TVRVdE1RQUVBQWtBQUFCWGFIUjBjSE02THk5M2QzY3VZMjl1WjNKbGMzTXVaMjkyTHk5amIyNW5jbVZ6YzJsdmJtRnNMWEpsWTI5eVpDOHhPVGs1THpBMkx6SXpMMmh2ZFhObExYTmxZM1JwYjI0dllYSjBhV05zWlM5SU5EZ3hOUzB4QUFBRUFnQUFBQUVBQkFBSkFBQUFCVzVoYldWekFBQUFFQUFBQUFJQUJBQUpBQUFBQkdSaGRHVUFCQUFKQUFBQUEzVnliQUFBQkFJQUFBQUJBQVFBQ1FBQUFBbHliM2N1Ym1GdFpYTUFBQUFOQUFBQUFvQUFBQUFBQUFBR0FBQUVBZ0FBQXY4QUFBQVFBQUFBQVFBRUFBa0FBQUFLWkdGMFlTNW1jbUZ0WlFBQUFQNEFBQVFDQUFBQUFRQUVBQWtBQUFBSGIzQjBhVzl1Y3dBQUFoTUFBQUFGQUFBQUVBQUFBQUVBQkFBSkFBQUFBWElBQUFBUUFBQUFBUUFFQUFrQUFBQVFkVzV1WVcxbFpDMWphSFZ1YXkwek13QUFBQW9BQUFBQkFBQUFBUUFBQUEwQUFBQUJBQUFBQmdBQUFBMEFBQUFCQUFBQUFnQUFCQUlBQUFUL0FBQUFFQUFBQUFVQUJBQUpBQUFBQm1WdVoybHVaUUFFQUFrQUFBQUZiR0ZpWld3QUJBQUpBQUFBRG5KdmQyNWhiV1Z6TG5CeWFXNTBBQVFBQ1FBQUFBcHliM2R6TG5SdmRHRnNBQVFBQ1FBQUFBcGpiMnh6TG5SdmRHRnNBQUFBL2dBQUFQND0ifQ== -->
+<div data-pagedtable="false">
+<script data-pagedtable-source type="application/json">
+{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["date"],"name":[1],"type":["S3: POSIXct"],"align":["right"]},{"label":["url"],"name":[2],"type":["chr"],"align":["left"]}],"data":[{"1":"1998-10-07","2":"https://www.congress.gov//congressional-record/1998/10/07/house-section/article/H9870-1","_rn_":"1"},{"1":"1999-06-23","2":"https://www.congress.gov//congressional-record/1999/06/23/house-section/article/H4815-1","_rn_":"2"},{"1":"1999-06-23","2":"https://www.congress.gov//congressional-record/1999/06/23/house-section/article/H4815-1","_rn_":"3"},{"1":"1999-06-23","2":"https://www.congress.gov//congressional-record/1999/06/23/house-section/article/H4815-1","_rn_":"4"},{"1":"1999-06-23","2":"https://www.congress.gov//congressional-record/1999/06/23/house-section/article/H4815-1","_rn_":"5"},{"1":"1999-06-23","2":"https://www.congress.gov//congressional-record/1999/06/23/house-section/article/H4815-1","_rn_":"6"}],"options":{"columns":{"min":{},"max":[10],"total":[2]},"rows":{"min":[10],"max":[10],"total":[6]},"pages":{}}}
+  </script>
+</div>
+<!-- rnb-frame-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
+</div>
+<div id="text-pre-processing" class="section level3">
+<h3>Text Pre-processing</h3>
+<div id="regex" class="section level4">
+<h4>Regex</h4>
+<p>Next, we’ll start to clean up our text data, which is contained in the <code>segments</code> field. First, let’s look at a random document and see what we might need to clean:</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiIE1yLiBTcGVha2VyLCBJIHlpZWxkIDJcXFxcMS8yXFxcXCBtaW51dGVzIHRvIHRoZSBnZW50bGVtYW4gXFxuZnJvbSBQZW5uc3lsdmFuaWEgKE1yLiBQZXRlcnNvbikuXFxuICBcIlxuIn0= -->
+<pre><code>[1] &quot; Mr. Speaker, I yield 2\\1/2\\ minutes to the gentleman \nfrom Pennsylvania (Mr. Peterson).\n  &quot;</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>At least in this post, there are numbers, new line characters, <code>\n</code>, and some meaningless punctuation, e.g. ’'. To do this, we’ll use regex and the function <code>gsub</code> which uses regex pattern matching to find patterns and replace them with a specified set of characters.</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiTXIuIFNwZWFrZXIsIEkgeWllbGQgTlVNIG1pbnV0ZXMgdG8gdGhlIGdlbnRsZW1hbiBmcm9tIFBlbm5zeWx2YW5pYSAoTXIuIFBldGVyc29uKS5cIlxuIn0= -->
+<pre><code>[1] &quot;Mr. Speaker, I yield NUM minutes to the gentleman from Pennsylvania (Mr. Peterson).&quot;</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>Let’s unpack our regex operation:</p>
+<ul>
+<li><code>gsub('\\\\|/', '', segment)</code>
+<ul>
+<li>We want to remove ‘' and’/‘. However,’' is an escape character. ‘\’ is R’s version of a special regex character, and ‘\' escapes the regex character. So, to capture’', we need to use ‘\\’.</li>
+<li><code>|</code> functions as an OR operator.</li>
+</ul></li>
+<li><code>gsub('\\d+', 'NUM', text)</code>
+<ul>
+<li><code>\\d</code> matches digit characters. Adding <code>+</code> matches sequences of digits.</li>
+<li>Here, we replace digits with ‘NUM’.</li>
+</ul></li>
+<li><code>gsub('\\\n|\\s+', ' ', str_trim(text)))</code></li>
+</ul>
+<p>What else might we want to fix? Let’s look at the beginning of a few documents:</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiTXIuIFNwZWFrZXIsIGVhcmxpZXIgdG9kYXksIE9jdG9iZXIgTlVNLCBOVU0sIEkgd2FcIlxuWzJdIFwiTXIuIFNwZWFrZXIsIEkgaGF2ZSB0YWtlbiB0aGlzIGhvdXIgc3BlY2lhbCBvcmRlciBcIlxuWzNdIFwiTXIuIFNwZWFrZXIsIEkgdGhhbmsgdGhlIGdlbnRsZW1hbiBmcm9tIE1pbm5lc290YSBcIlxuWzRdIFwiTXIuIENoYWlybWFuLCB3ZSBjYW5ub3QgZ2V0IGFuIGFuc3dlciB0byB0aGUgcXVlc3RcIlxuWzVdIFwiTXIuIENoYWlybWFuLCBob3cgbXVjaCB0aW1lIGRvIEkgaGF2ZSByZW1haW5pbmc/IFRcIlxuWzZdIFwiTXIuIENoYWlybWFuLCBJIHlpZWxkIE5VTSBtaW51dGUgdG8gdGhlIGdlbnRsZW1hbiBcIlxuWzddIFwiTXIuIENoYWlybWFuLCBJIHlpZWxkIG15c2VsZiBzdWNoIHRpbWUgYXMgSSBtYXkgY29cIlxuWzhdIFwiTXIuIFNwZWFrZXIsIEkgdGhhbmsgdGhlIGRpc3Rpbmd1aXNoZWQgY2hhaXJtYW4gb2ZcIlxuWzldIFwiSSB5aWVsZCB0byB0aGUgZ2VudGxlbWFuIGZyb20gTmV3IFlvcmsuXCIgICAgICAgICAgIFxuIn0= -->
+<pre><code>[1] &quot;Mr. Speaker, earlier today, October NUM, NUM, I wa&quot;
+[2] &quot;Mr. Speaker, I have taken this hour special order &quot;
+[3] &quot;Mr. Speaker, I thank the gentleman from Minnesota &quot;
+[4] &quot;Mr. Chairman, we cannot get an answer to the quest&quot;
+[5] &quot;Mr. Chairman, how much time do I have remaining? T&quot;
+[6] &quot;Mr. Chairman, I yield NUM minute to the gentleman &quot;
+[7] &quot;Mr. Chairman, I yield myself such time as I may co&quot;
+[8] &quot;Mr. Speaker, I thank the distinguished chairman of&quot;
+[9] &quot;I yield to the gentleman from New York.&quot;           </code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p><br></p>
+<div class="alert alert-danger" role="alert">
+<p><strong>Problem:</strong> How could we remove these strings from each document?</p>
+</div>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
 <!-- rnb-chunk-end -->
@@ -1974,11 +2058,27 @@ present, I would have voted ``aye'' on rollcall No. 489, to agree to
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFwiZWFybGllciB0b2RheSwgT2N0b2JlciBOVU0sIE5VTSwgSSB3YXMgdW5hdm9pZGFibHlcIlxuWzJdIFwiSSBoYXZlIHRha2VuIHRoaXMgaG91ciBzcGVjaWFsIG9yZGVyIHRoaXMgZXZlbmluZyBcIlxuWzNdIFwiSSB0aGFuayB0aGUgZ2VudGxlbWFuIGZyb20gTWlubmVzb3RhIHZlcnkgbXVjaCBmb3JcIlxuWzRdIFwid2UgY2Fubm90IGdldCBhbiBhbnN3ZXIgdG8gdGhlIHF1ZXN0aW9uLCBhbmQgdGhhdCBcIlxuWzVdIFwiaG93IG11Y2ggdGltZSBkbyBJIGhhdmUgcmVtYWluaW5nPyBUaGUgQ0hBSVJNQU4uIFRcIlxuWzZdIFwiSSB5aWVsZCBOVU0gbWludXRlIHRvIHRoZSBnZW50bGVtYW4gZnJvbSBGbG9yaWRhIChcIlxuWzddIFwiSSB5aWVsZCBteXNlbGYgc3VjaCB0aW1lIGFzIEkgbWF5IGNvbnN1bWUuIFRvIHRoZSBcIlxuWzhdIFwiSSB0aGFuayB0aGUgZGlzdGluZ3Vpc2hlZCBjaGFpcm1hbiBvZiB0aGUgQ29tbWl0dGVcIlxuWzldIFwiSSB5aWVsZCB0byB0aGUgZ2VudGxlbWFuIGZyb20gTmV3IFlvcmsuXCIgICAgICAgICAgIFxuIn0= -->
+<pre><code>[1] &quot;earlier today, October NUM, NUM, I was unavoidably&quot;
+[2] &quot;I have taken this hour special order this evening &quot;
+[3] &quot;I thank the gentleman from Minnesota very much for&quot;
+[4] &quot;we cannot get an answer to the question, and that &quot;
+[5] &quot;how much time do I have remaining? The CHAIRMAN. T&quot;
+[6] &quot;I yield NUM minute to the gentleman from Florida (&quot;
+[7] &quot;I yield myself such time as I may consume. To the &quot;
+[8] &quot;I thank the distinguished chairman of the Committe&quot;
+[9] &quot;I yield to the gentleman from New York.&quot;           </code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<!-- rnb-text-end -->
+</div>
 </div>
 </div>
 </div>
 
-<div id="rmd-source-code">LS0tCnRpdGxlOiAiVGhlb3J5IERyaXZlbiBUZXh0IEFuYWx5c2lzIFdvcmtzaG9wIgpzdWJ0aXRsZTogIlRleHQgUHJlLXByb2Nlc3NpbmdcblxuU1BTUCAyMDIwIgphdXRob3I6IAogIG5hbWU6ICJKb2UgSG9vdmVyICYgQnJlbmRhbiBLZW5uZWR5IgogIGVtYWlsOiAiam9zZXBoLmhvb3ZlckBrZWxsb2dnLm5vcnRod2VzdGVybi5lZHVcblxuYnRrZW5uZWRAdXNjLmVkdSIKb3V0cHV0OgogIGh0bWxfbm90ZWJvb2s6CiAgICB0b2M6IHllcwotLS0KCgojIFdvcmtzaG9wIERhdGEKClRocm91Z2hvdXQgdGhpcyB3b3Jrc2hvcCwgd2Ugd2lsbCBiZSB3b3JraW5nIHdpdGggYSBjb2xsZWN0aW9uIG9mIFVuaXRlZCBTdGF0ZXMgQ29uZ3Jlc3Npb25hbCBzcGVlY2hlcyBmcm9tIHRoZSBIb3VzZS4gVGhpcyBkYXRhIGlzIHN0b3JlZCBpbiBKU09OTCBmb3JtYXQuCgpJdCBpcyBzdG9yZWQgaW4gdGhlIGZpbGU6IGAuLi9kYXRhL3RkdGFfaG91c2VfZGF0YS5qc29uYAoKCiMgTG9hZGluZyBkYXRhCgpgYGB7ciwgZWNobz1GLCBtZXNzYWdlPUYsIHdhcm5pbmc9Rn0KIyBEZWZpbmUgY2h1bmsgb3B0aW9ucwprbml0cjo6b3B0c19jaHVuayRzZXQoZWNobz1GLCBtZXNzYWdlPUYsIHdhcm5pbmc9RikKYGBgCgpgYGB7ciwgbWVzc2FnZT1GLCAgZWNobz1GfQojIExvYWQgcGFja2FnZXMgCmxpYnJhcnkocGFjbWFuKQpwX2xvYWQocmVhZHIsIGRwbHlyLCB0aWR5ciwgZ2dwbG90MiwgcG1yLCBqdG9vbHMsIGtuaXRyLCByZXNoYXBlMiwganNvbmxpdGUsIAogICAgICAgbHVicmlkYXRlKQoKYGBgCgoKVGV4dCBkYXRhIGNhbiBiZSBzdG9yZWQgaW4gbWFueSBmb3JtYXRzOgoKKiBDU1YKKiBTZXBhcmF0ZSBmaWxlcyAoZS5nLiB0eHQpIGZvciBlYWNoICJkb2N1bWVudCIKKiBBIHNpbmdsZSB0eHQgd2l0aCBkb2N1bWVudHMgbmV3bGluZSBkZWxpbWl0ZWQgCiogSlNPTgoqIEpTT05ML05ESlNPTgoqIFhNTAoqIC4uLgoKCldpdGggdGhpcyBtdWNoIHZhcmlhdGlvbiwgdGhlIGZpcnN0IGNoYWxsZW5nZSBvZiB0ZXh0IGFuYWx5c2lzIGlzIG9mdGVuIGZpZ3VyaW5nIG91dCBob3cgdG8gbG9hZCB5b3VyIGRhdGEhIFNvbWV0aW1lcyB5b3Uga25vdyB0aGUgZm9ybWF0IGEgcHJpb3JpLCB3aGljaCBzaW1wbGlmaWVzIHRoZSB0YXNrLiBIb3dldmVyLCBvdGhlciB0aW1lcyB5b3UgbWlnaHQgbm90IGtub3cgdGhlIGZvcm1hdC4gSW4gdGhvc2UgaW5zdGFuY2VzLCBpdCdzIHVzZWZ1bCB0byB0YWtlIGEgZ2xhbmNlIGF0IHRoZSByYXcgZGF0YS4gCgoKV2UgY2FuIGRvIHRoYXQgd2l0aCB0aGUgYHJlYWRMaW5lc2AgZnVuY3Rpb246IAoKCmBgYHtyLCBlY2hvPVR9CnJlYWRMaW5lcygnLi4vZGF0YS90ZHRhX2hvdXNlX2RhdGEuanNvbicsIG49MSkKCmBgYAoKPGJyPgoKPGRpdiBjbGFzcz0iYWxlcnQgYWxlcnQtc3VjY2VzcyIgcm9sZT0iYWxlcnQiPgogIDxzdHJvbmc+UXVlc3Rpb246PC9zdHJvbmc+IEFueSBpZGVhIHdoYXQgZm9ybWF0IHRoaXMgZGF0YSBpcz8KPC9kaXY+CgoKCiMjIEpTT04gZm9ybWF0dGVkIGRhdGEKCiMjIyBKU09OCgpKU09OIGlzIGEgZGF0YSBzdG9yYWdlIGZvcm1hdCB0aGF0IGlzIHdpZGVseSB1c2VkIGZvciBzdG9yaW5nIHRleHQgZGF0YS4gSXQgaGFzIHRoZSBmb2xsb3dpbmcgY2hhcmFjdGVyaXN0aWNzOgoKKiBEYXRhIGlzIGluIG5hbWUvdmFsdWUgcGFpcnMKKiBEYXRhIGlzIHNlcGFyYXRlZCBieSBjb21tYXMKKiBDdXJseSBicmFjZXMgKCJ7IiBhbmQgIn0iKSBob2xkIG9iamVjdHMKCkZvciBleGFtcGxlLCAKCmBgYHtyLCBldmFsPUYsIGVjaG89VH0KCiMgSlNPTiBlZyAxCnsnbmFtZSc6ICdqb2UnLAogJ2NpdHknOiAnY2hpY2FnbycKfSAKCgojSlNPTiBlZyAyCnsnbmFtZSc6IGMoJ2pvZScsICdicmVuZGFuJyksCiAnY2l0eSc6IGMoJ2NoaWNhZ28nLCAnbG9zIGFuZ2VsZXMnKQp9CmBgYAoKIyMjIEpTT05ML05ESlNPTgoKT2Z0ZW4sIGEgY29sbGVjdGlvbiBvZiBkYXRhIG9yIGEgY29ycHVzIG9mIHRleHQgaXMgc3RvcmVkIGluIG11bHRpcGxlIEpTT04gb2JqZWN0cyB0aGF0IGFyZSBkZWxpbWl0ZWQgYnkgYSBuZXdsaW5lLiBGb3IgaW50c2FuY2UsIGEgY29ycHVzIG9mIDEwMCBkb2N1bWVudHMgbWlnaHQgYmUgc3RvcmVkIGluIGEgZmlsZSB3aXRoIDEwMCBqc29uIG9iamVjdHMsIG9uZSBmb3IgZWFjaCBkb2N1bWVudCwgZGVsaW1pdGVkIGJ5IGEgbmV3IGxpbmUuIERhdGEgd2l0aCB0aGlzIGZvcm1hdCBpcyB1c3VhbGx5IHJlZmVycmVkIHRvIGFzIEpTT05MIChlLmcuIEpTT04gbGluZXMpIG9yIE5ESlNPTiAoZS5nLiBuZXcgbGluZSBkZWxpbWl0ZWQgSlNPTikuIAoKRm9yIGV4YW1wbGUsIGEgZmlsZSBjb250YWluaW5nIHRoZSBqc29uIG9iamVjdHMgYmVsb3cgd291bGQgYmUgYSBKU09OTCBmb3JtYXQgZGF0YSBvYmplY3Q6CgpgYGB7ciwgZXZhbD1GLCBlY2hvPVR9CgojIEpTT04gZWcgMQp7J25hbWUnOiAnam9lJywgJ2NpdHknOiAnY2hpY2FnbycsICd0ZXh0JzogJ0hpJ30gCnsnbmFtZSc6ICdicmVuZGFuJywgJ2NpdHknOiAnbG9zIGFuZ2VsZXMnLCAndGV4dCc6ICdIb3dkeSd9IAoKYGBgCgoKIyMgTG9hZGluZyBXb3Jrc2hvcCBEYXRhCgpPdXIgZGF0YSBoYXMgYSBKU09OTCBmb3JtYXQuIFRvIGxvYWQgaXQsIHdlIHdpbGwgdXNlIHRoZSBgc3RyZWFtX2luYCBmdW5jdGlvbiBmcm9tIHRoZSBganNvbmxpdGVgIHBhY2thZ2UuIFNwZWNpZmljYWxseSwgd2UnbGwgcHJvdmlkZSBhIGZpbGUgY29ubmVjdGlvbiB0byBvdXIgZGF0YSBmaWxlIGFzIHRoZSBmaXJzdCBhcmd1bWVudCB0byBgc3RyZWFtX2luYC4gCgpUaGUgYHN0cmVhbV9pbmAgZnVuY3Rpb24gd2lsbCByZWFkIHRoZSBKU09OTCBmaWxlIGFuZCBzdG9yZSBpdCBpbiBhbiBSIGRhdGEuZnJhbWUgb2JqZWN0LgoKCmBgYHtyLCBlY2hvPVQsbWVzc2FnZT1GLCByZXN1bHRzPSdoaWRlJ30KZGggPC0gc3RyZWFtX2luKGZpbGUoIi4uL2RhdGEvdGR0YV9ob3VzZV9kYXRhLmpzb24iKSkKCmBgYAoKIyMgUHJvY2Vzc2luZyBXb3Jrc2hvcCBEYXRhCgpGaXJzdCwgbGV0J3MgdHJ5IHRvIGdldCBhbiBpZGVhIG9mIGhvdyB0aGUgZGF0YSBpcyBzdHJ1Y3R1cmVkLiAKCmBgYHtyfQpzdHIoZGgpCmBgYAoKCmBgYHtyfQpzdW1tYXJ5KGRoKQpgYGAKCgpgYGB7cn0KY2F0KHBhc3RlKCdTcGVha2VyOiAnLCBkaCRzcGVha2VyWzFdLCAnXG5cblNlZ21lbnQ6ICcsIGRoJHNlZ21lbnRbMV0sIHNlcD0nJykpCmBgYAoKIyMjIyBEYXRhIEZvcm1hdHRpbmcKCgpGaXJzdCwgbGV0J3MgZGVhbCB3aXRoIHRoZSBkYXRlIGZpZWxkOiAKCmBgYHtyfQpoZWFkKGRoJGRhdGUpCmBgYAoKCjxkaXYgY2xhc3M9ImFsZXJ0IGFsZXJ0LXN1Y2Nlc3MiIHJvbGU9ImFsZXJ0Ij4KICA8c3Ryb25nPlF1ZXN0aW9uOjwvc3Ryb25nPiBXaGF0IGZvcm1hdCBpcyB0aGlzIGRhdGE/CjwvZGl2PgoKV2UgY2FuIHVzZSB0aGUgYGFzX2RhdGVgIGZ1bmN0aW9uIGZyb20gdGhlIGBsdWJyaWRhdGVgIHBhY2thZ2UgdG8gY29udmVydCB0aGUgVU5JWCB0aW1lc3RhbXBzIHRvIGh1bWFuLXJlYWRhYmxlIGRhdGUgb2JqZWN0czoKCmBgYHtyfQpkaHAgPC0gZGggJT4lCiAgbXV0YXRlKHJhd19kYXRlID0gZGF0ZSwKICAgICAgICAgZGF0ZSA9IGx1YnJpZGF0ZTo6YXNfZGF0ZXRpbWUoZGF0ZSkpCgpoZWFkKGRocCRkYXRlKQpgYGAKCldhaXQuLi53aGF0J3MgZ29pbmcgb24gaGVyZT8gT2J2aW91c2x5IHRoaXMgaXNuJ3QgY29ycmVjdC4gV2hhdCBkbyB3ZSBkbz8KCldlbGwsIGZvcnR1bmF0ZWx5LCBlYWNoIG9ic2VydmF0aW9uIGlzIGFzc29jaWF0ZWQgd2l0aCBhIFVSTC4gU28sIHdlIGNhbiBhdCBsZWFzdCBnZXQgY2hlY2sgdGhlIGNvcnJlY3QgZGF0ZSBmb3IgdGhlIGZpcnN0IHJlY29yZDogCgpgYGB7cn0KZGgkdXJsWzFdCmBgYAoKImh0dHBzOi8vd3d3LmNvbmdyZXNzLmdvdi8vY29uZ3Jlc3Npb25hbC1yZWNvcmQvMTk5Ny8wNC8wOC9ob3VzZS1zZWN0aW9uL2FydGljbGUvSDEyOTYtNCIKCkl0IGxvb2tzIGxpa2UgdGhlIGNvcnJlY3QgZGF0ZSBmb3IgdGhlIGZpcnN0IGlzIEFwcmlsIDA4LCAxOTk3LiBXaXRoIHRoYXQgaW5mb3JtYXRpb24sIHdlIGNhbiBmaWd1cmUgb3V0IHdoYXQgdGhlIHRpbWVzdGFtcCAqc2hvdWxkKiBiZSAocm91Z2hseSk6CgpgYGB7cn0Kc2hvdWxkX2JlID0gYXMubnVtZXJpYyhhcy5QT1NJWGN0KCIxOTk3LTA0LTA4IiwgZm9ybWF0PSIlWS0lbS0lZCIpKQppcyA9IGRoJGRhdGVbMV0KCmNhdChwYXN0ZSgnU2hvdWxkIGJlOiAnLCBzaG91bGRfYmUsICcgKERpZ2l0cyA9ICcsIG5jaGFyKHNob3VsZF9iZSksJylcbicsIAogICAgICAgICAgJ0lzOiAnLCBpcywgJyAoRGlnaXRzID0gJywgbmNoYXIoaXMpLCcpXG4nLCBzZXA9JycpKQpgYGAKCkl0IGxvb2tzIGxpa2Ugd2UncmUgb2ZmIGJ5IGFib3V0IHRocmVlIG9yZGVycyBvZiBtYWduaXR1ZGUuIElmIHdlIGZpeCB0aGlzLCBkbyB3ZSBnZXQgdGhlIHJpZ2h0IGRhdGU/CgpgYGB7cn0KYXNfZGF0ZXRpbWUoaXMvMTAwMCkKYGBgCgpMZXQncyB0cnkgdGhpcyBmb3IgYWxsIHRoZSBkYXRhIGFuZCBoYW5kIGNoZWNrIGEgZmV3IGNhc2VzOgoKYGBge3J9CmRocCA8LSBkaCAlPiUKICBtdXRhdGUocmF3X2RhdGUgPSBkYXRlLAogICAgICAgICBkYXRlID0gbHVicmlkYXRlOjphc19kYXRldGltZShkYXRlLzEwMDApKQoKZGhwICU+JSBzZWxlY3QoZGF0ZSwgdXJsKSAlPiUgaGVhZCgpCmBgYAoKCmBgYHtyfQpkaHAgPC0gZGhwICU+JQogIGZpbHRlcihkYXRlID49IGFzX2RhdGV0aW1lKCcxOTk4LTYtMDEnKSAmIGRhdGUgPD0gYXNfZGF0ZXRpbWUoJzE5OTktMDctMDEnKSkgCgoKICAKYGBgCgoKYGBge3J9CnN0cmVhbV9vdXQoZGhwLCBmaWxlKCdkYXRhL3RkdGFfaG91c2VfZGF0YS5qc29uJykpCmBgYAoK</div>
+<div id="rmd-source-code">LS0tCnRpdGxlOiAiVGhlb3J5IERyaXZlbiBUZXh0IEFuYWx5c2lzIFdvcmtzaG9wIgpzdWJ0aXRsZTogIlRleHQgUHJlLXByb2Nlc3NpbmdcblxuU1BTUCAyMDIwIgphdXRob3I6IAogIG5hbWU6ICJKb2UgSG9vdmVyICYgQnJlbmRhbiBLZW5uZWR5IgogIGVtYWlsOiAiam9zZXBoLmhvb3ZlckBrZWxsb2dnLm5vcnRod2VzdGVybi5lZHVcblxuYnRrZW5uZWRAdXNjLmVkdSIKb3V0cHV0OgogIGh0bWxfbm90ZWJvb2s6CiAgICB0b2M6IHllcwotLS0KCgojIFdvcmtzaG9wIERhdGEKClRocm91Z2hvdXQgdGhpcyB3b3Jrc2hvcCwgd2Ugd2lsbCBiZSB3b3JraW5nIHdpdGggYSBjb2xsZWN0aW9uIG9mIFVuaXRlZCBTdGF0ZXMgQ29uZ3Jlc3Npb25hbCBzcGVlY2hlcyBmcm9tIHRoZSBIb3VzZS4gVGhpcyBkYXRhIGlzIHN0b3JlZCBpbiBKU09OTCBmb3JtYXQuCgpJdCBpcyBzdG9yZWQgaW4gdGhlIGZpbGU6IGAuLi9kYXRhL3RkdGFfaG91c2VfZGF0YS5qc29uYAoKCiMgTG9hZGluZyBkYXRhCgpgYGB7ciwgZWNobz1GLCBtZXNzYWdlPUYsIHdhcm5pbmc9Rn0KIyBEZWZpbmUgY2h1bmsgb3B0aW9ucwprbml0cjo6b3B0c19jaHVuayRzZXQoZWNobz1GLCBtZXNzYWdlPUYsIHdhcm5pbmc9RikKYGBgCgpgYGB7ciwgbWVzc2FnZT1GLCAgZWNobz1GfQojIExvYWQgcGFja2FnZXMgCmxpYnJhcnkocGFjbWFuKQpwX2xvYWQocmVhZHIsIGRwbHlyLCB0aWR5ciwgZ2dwbG90MiwgcG1yLCBqdG9vbHMsIGtuaXRyLCByZXNoYXBlMiwganNvbmxpdGUsIAogICAgICAgbHVicmlkYXRlLCBzdHJpbmdyKQoKYGBgCgoKVGV4dCBkYXRhIGNhbiBiZSBzdG9yZWQgaW4gbWFueSBmb3JtYXRzOgoKKiBDU1YKKiBTZXBhcmF0ZSBmaWxlcyAoZS5nLiB0eHQpIGZvciBlYWNoICJkb2N1bWVudCIKKiBBIHNpbmdsZSB0eHQgd2l0aCBkb2N1bWVudHMgbmV3bGluZSBkZWxpbWl0ZWQgCiogSlNPTgoqIEpTT05ML05ESlNPTgoqIFhNTAoqIC4uLgoKCldpdGggdGhpcyBtdWNoIHZhcmlhdGlvbiwgdGhlIGZpcnN0IGNoYWxsZW5nZSBvZiB0ZXh0IGFuYWx5c2lzIGlzIG9mdGVuIGZpZ3VyaW5nIG91dCBob3cgdG8gbG9hZCB5b3VyIGRhdGEhIFNvbWV0aW1lcyB5b3Uga25vdyB0aGUgZm9ybWF0IGEgcHJpb3JpLCB3aGljaCBzaW1wbGlmaWVzIHRoZSB0YXNrLiBIb3dldmVyLCBvdGhlciB0aW1lcyB5b3UgbWlnaHQgbm90IGtub3cgdGhlIGZvcm1hdC4gSW4gdGhvc2UgaW5zdGFuY2VzLCBpdCdzIHVzZWZ1bCB0byB0YWtlIGEgZ2xhbmNlIGF0IHRoZSByYXcgZGF0YS4gCgoKV2UgY2FuIGRvIHRoYXQgd2l0aCB0aGUgYHJlYWRMaW5lc2AgZnVuY3Rpb246IAoKCmBgYHtyLCBlY2hvPVR9CnJlYWRMaW5lcygnLi4vZGF0YS90ZHRhX2hvdXNlX2RhdGEuanNvbicsIG49MSkKCmBgYAoKPGJyPgoKPGRpdiBjbGFzcz0iYWxlcnQgYWxlcnQtc3VjY2VzcyIgcm9sZT0iYWxlcnQiPgogIDxzdHJvbmc+UXVlc3Rpb246PC9zdHJvbmc+IEFueSBpZGVhIHdoYXQgZm9ybWF0IHRoaXMgZGF0YSBpcz8KPC9kaXY+CgoKCiMjIEpTT04gZm9ybWF0dGVkIGRhdGEKCiMjIyBKU09OCgpKU09OIGlzIGEgZGF0YSBzdG9yYWdlIGZvcm1hdCB0aGF0IGlzIHdpZGVseSB1c2VkIGZvciBzdG9yaW5nIHRleHQgZGF0YS4gSXQgaGFzIHRoZSBmb2xsb3dpbmcgY2hhcmFjdGVyaXN0aWNzOgoKKiBEYXRhIGlzIGluIG5hbWUvdmFsdWUgcGFpcnMKKiBEYXRhIGlzIHNlcGFyYXRlZCBieSBjb21tYXMKKiBDdXJseSBicmFjZXMgKCJ7IiBhbmQgIn0iKSBob2xkIG9iamVjdHMKCkZvciBleGFtcGxlLCAKCmBgYHtyLCBldmFsPUYsIGVjaG89VH0KCiMgSlNPTiBlZyAxCnsnbmFtZSc6ICdqb2UnLAogJ2NpdHknOiAnY2hpY2FnbycKfSAKCgojSlNPTiBlZyAyCnsnbmFtZSc6IGMoJ2pvZScsICdicmVuZGFuJyksCiAnY2l0eSc6IGMoJ2NoaWNhZ28nLCAnbG9zIGFuZ2VsZXMnKQp9CmBgYAoKIyMjIEpTT05ML05ESlNPTgoKT2Z0ZW4sIGEgY29sbGVjdGlvbiBvZiBkYXRhIG9yIGEgY29ycHVzIG9mIHRleHQgaXMgc3RvcmVkIGluIG11bHRpcGxlIEpTT04gb2JqZWN0cyB0aGF0IGFyZSBkZWxpbWl0ZWQgYnkgYSBuZXdsaW5lLiBGb3IgaW50c2FuY2UsIGEgY29ycHVzIG9mIDEwMCBkb2N1bWVudHMgbWlnaHQgYmUgc3RvcmVkIGluIGEgZmlsZSB3aXRoIDEwMCBqc29uIG9iamVjdHMsIG9uZSBmb3IgZWFjaCBkb2N1bWVudCwgZGVsaW1pdGVkIGJ5IGEgbmV3IGxpbmUuIERhdGEgd2l0aCB0aGlzIGZvcm1hdCBpcyB1c3VhbGx5IHJlZmVycmVkIHRvIGFzIEpTT05MIChlLmcuIEpTT04gbGluZXMpIG9yIE5ESlNPTiAoZS5nLiBuZXcgbGluZSBkZWxpbWl0ZWQgSlNPTikuIAoKRm9yIGV4YW1wbGUsIGEgZmlsZSBjb250YWluaW5nIHRoZSBqc29uIG9iamVjdHMgYmVsb3cgd291bGQgYmUgYSBKU09OTCBmb3JtYXQgZGF0YSBvYmplY3Q6CgpgYGB7ciwgZXZhbD1GLCBlY2hvPVR9CgojIEpTT04gZWcgMQp7J25hbWUnOiAnam9lJywgJ2NpdHknOiAnY2hpY2FnbycsICd0ZXh0JzogJ0hpJ30gCnsnbmFtZSc6ICdicmVuZGFuJywgJ2NpdHknOiAnbG9zIGFuZ2VsZXMnLCAndGV4dCc6ICdIb3dkeSd9IAoKYGBgCgoKIyMgTG9hZGluZyBXb3Jrc2hvcCBEYXRhCgpPdXIgZGF0YSBoYXMgYSBKU09OTCBmb3JtYXQuIFRvIGxvYWQgaXQsIHdlIHdpbGwgdXNlIHRoZSBgc3RyZWFtX2luYCBmdW5jdGlvbiBmcm9tIHRoZSBganNvbmxpdGVgIHBhY2thZ2UuIFNwZWNpZmljYWxseSwgd2UnbGwgcHJvdmlkZSBhIGZpbGUgY29ubmVjdGlvbiB0byBvdXIgZGF0YSBmaWxlIGFzIHRoZSBmaXJzdCBhcmd1bWVudCB0byBgc3RyZWFtX2luYC4gCgpUaGUgYHN0cmVhbV9pbmAgZnVuY3Rpb24gd2lsbCByZWFkIHRoZSBKU09OTCBmaWxlIGFuZCBzdG9yZSBpdCBpbiBhbiBSIGRhdGEuZnJhbWUgb2JqZWN0LgoKCmBgYHtyLCBlY2hvPVQsbWVzc2FnZT1GLCByZXN1bHRzPSdoaWRlJ30KZGggPC0gc3RyZWFtX2luKGZpbGUoIi4uL2RhdGEvdGR0YV9ob3VzZV9kYXRhLmpzb24iKSkKCmBgYAoKIyMgUHJvY2Vzc2luZyBXb3Jrc2hvcCBEYXRhCgpGaXJzdCwgbGV0J3MgdHJ5IHRvIGdldCBhbiBpZGVhIG9mIGhvdyB0aGUgZGF0YSBpcyBzdHJ1Y3R1cmVkLiAKCmBgYHtyfQpzdHIoZGgpCmBgYAoKCmBgYHtyfQpzdW1tYXJ5KGRoKQpgYGAKCgpgYGB7cn0KY2F0KHBhc3RlKCdTcGVha2VyOiAnLCBkaCRzcGVha2VyWzFdLCAnXG5cblNlZ21lbnQ6ICcsIGRoJHNlZ21lbnRbMV0sIHNlcD0nJykpCmBgYAoKIyMjIyBEYXRlIEZvcm1hdHRpbmcKCgpGaXJzdCwgbGV0J3MgZGVhbCB3aXRoIHRoZSBkYXRlIGZpZWxkOiAKCmBgYHtyfQpoZWFkKGRoJGRhdGUpCmBgYAoKCjxkaXYgY2xhc3M9ImFsZXJ0IGFsZXJ0LXN1Y2Nlc3MiIHJvbGU9ImFsZXJ0Ij4KICA8c3Ryb25nPlF1ZXN0aW9uOjwvc3Ryb25nPiBXaGF0IGZvcm1hdCBpcyB0aGlzIGRhdGE/CjwvZGl2PgoKV2UgY2FuIHVzZSB0aGUgYGFzX2RhdGVgIGZ1bmN0aW9uIGZyb20gdGhlIGBsdWJyaWRhdGVgIHBhY2thZ2UgdG8gY29udmVydCB0aGUgVU5JWCB0aW1lc3RhbXBzIHRvIGh1bWFuLXJlYWRhYmxlIGRhdGUgb2JqZWN0czoKCmBgYHtyfQpkaHAgPC0gZGggJT4lCiAgbXV0YXRlKHJhd19kYXRlID0gZGF0ZSwKICAgICAgICAgZGF0ZSA9IGx1YnJpZGF0ZTo6YXNfZGF0ZXRpbWUoZGF0ZSkpCgpoZWFkKGRocCRkYXRlKQpgYGAKCldhaXQuLi53aGF0J3MgZ29pbmcgb24gaGVyZT8gT2J2aW91c2x5IHRoaXMgaXNuJ3QgY29ycmVjdC4gV2hhdCBkbyB3ZSBkbz8KCldlbGwsIGZvcnR1bmF0ZWx5LCBlYWNoIG9ic2VydmF0aW9uIGlzIGFzc29jaWF0ZWQgd2l0aCBhIFVSTC4gU28sIHdlIGNhbiBhdCBsZWFzdCBnZXQgY2hlY2sgdGhlIGNvcnJlY3QgZGF0ZSBmb3IgdGhlIGZpcnN0IHJlY29yZDogCgpgYGB7cn0KZGgkdXJsWzFdCmBgYAoKImh0dHBzOi8vd3d3LmNvbmdyZXNzLmdvdi8vY29uZ3Jlc3Npb25hbC1yZWNvcmQvMTk5OC8xMC8wNy9ob3VzZS1zZWN0aW9uL2FydGljbGUvSDk4NzAtMSIKCkl0IGxvb2tzIGxpa2UgdGhlIGNvcnJlY3QgZGF0ZSBmb3IgdGhlIGZpcnN0IGlzIE9jdG9iZXIgMDcsIDE5OTguIFdpdGggdGhhdCBpbmZvcm1hdGlvbiwgd2UgY2FuIGZpZ3VyZSBvdXQgd2hhdCB0aGUgdGltZXN0YW1wICpzaG91bGQqIGJlIChyb3VnaGx5KToKCgpgYGB7cn0Kc2hvdWxkX2JlID0gYXMubnVtZXJpYyhhcy5QT1NJWGN0KCIxOTk4LTEwLTA3IiwgZm9ybWF0PSIlWS0lbS0lZCIpKQppcyA9IGRoJGRhdGVbMV0KCmNhdChwYXN0ZSgnU2hvdWxkIGJlOiAnLCBzaG91bGRfYmUsICcgKERpZ2l0cyA9ICcsIG5jaGFyKHNob3VsZF9iZSksJylcbicsIAogICAgICAgICAgJ0lzOiAnLCBpcywgJyAoRGlnaXRzID0gJywgbmNoYXIoaXMpLCcpXG4nLCBzZXA9JycpKQpgYGAKCkl0IGxvb2tzIGxpa2Ugd2UncmUgb2ZmIGJ5IGFib3V0IHRocmVlIG9yZGVycyBvZiBtYWduaXR1ZGUuIElmIHdlIGZpeCB0aGlzLCBkbyB3ZSBnZXQgdGhlIHJpZ2h0IGRhdGU/CgpgYGB7cn0KYXNfZGF0ZXRpbWUoaXMvMTAwMCkKYGBgCgpMZXQncyB0cnkgdGhpcyBmb3IgYWxsIHRoZSBkYXRhIGFuZCBoYW5kIGNoZWNrIGEgZmV3IGNhc2VzOgoKYGBge3J9CmRocCA8LSBkaCAlPiUKICBtdXRhdGUocmF3X2RhdGUgPSBkYXRlLAogICAgICAgICBkYXRlID0gbHVicmlkYXRlOjphc19kYXRldGltZShkYXRlLzEwMDApKQoKZGhwICU+JSBzZWxlY3QoZGF0ZSwgdXJsKSAlPiUgaGVhZCgpCmBgYAoKIyMjIFRleHQgUHJlLXByb2Nlc3NpbmcKCiMjIyMgUmVnZXgKCk5leHQsIHdlJ2xsIHN0YXJ0IHRvIGNsZWFuIHVwIG91ciB0ZXh0IGRhdGEsIHdoaWNoIGlzIGNvbnRhaW5lZCBpbiB0aGUgYHNlZ21lbnRzYCBmaWVsZC4gRmlyc3QsIGxldCdzIGxvb2sgYXQgYSByYW5kb20gZG9jdW1lbnQgYW5kIHNlZSB3aGF0IHdlIG1pZ2h0IG5lZWQgdG8gY2xlYW46CgpgYGB7cn0KZGhwJHNlZ21lbnRbMTAwXQpgYGAKCkF0IGxlYXN0IGluIHRoaXMgcG9zdCwgdGhlcmUgYXJlIG51bWJlcnMsIG5ldyBsaW5lIGNoYXJhY3RlcnMsIGBcbmAsIGFuZCBzb21lIG1lYW5pbmdsZXNzIHB1bmN0dWF0aW9uLCBlLmcuICdcJy4gVG8gZG8gdGhpcywgd2UnbGwgdXNlIHJlZ2V4IGFuZCB0aGUgZnVuY3Rpb24gYGdzdWJgIHdoaWNoIHVzZXMgcmVnZXggcGF0dGVybiBtYXRjaGluZyB0byBmaW5kIHBhdHRlcm5zIGFuZCByZXBsYWNlIHRoZW0gd2l0aCBhIHNwZWNpZmllZCBzZXQgb2YgY2hhcmFjdGVycy4gCgoKYGBge3J9CmRocCA8LSBkaHAgJT4lCiAgbXV0YXRlKHRleHQgPSBnc3ViKCdcXFxcfC8nLCAnJywgc2VnbWVudCksICMgUmVtb3ZlICdcJyBhbmQgJy8nCiAgICAgICAgIHRleHQgPSBnc3ViKCdcXGQrJywgJ05VTScsIHRleHQpLAogICAgICAgICB0ZXh0ID0gZ3N1YignXFxcbnxcXHMrJywgJyAnLCBzdHJfdHJpbSh0ZXh0KSkpCiAgICAgICAgIAogICAgICAgICAKICAgICAgICAgCmBgYAoKYGBge3J9CmRocCR0ZXh0WzEwMF0KYGBgCgoKTGV0J3MgdW5wYWNrIG91ciByZWdleCBvcGVyYXRpb246IAoKKiBgZ3N1YignXFxcXHwvJywgJycsIHNlZ21lbnQpYCAKICAqIFdlIHdhbnQgdG8gcmVtb3ZlICdcJyBhbmQgJy8nLiBIb3dldmVyLCAnXCcgaXMgYW4gZXNjYXBlIGNoYXJhY3Rlci4gJ1xcJyBpcyBSJ3MgdmVyc2lvbiBvZiBhIHNwZWNpYWwgcmVnZXggY2hhcmFjdGVyLCBhbmQgJ1xcXCcgZXNjYXBlcyB0aGUgcmVnZXggY2hhcmFjdGVyLiBTbywgdG8gY2FwdHVyZSAnXCcsIHdlIG5lZWQgdG8gdXNlICdcXFxcJy4gCiAgKiBgfGAgZnVuY3Rpb25zIGFzIGFuIE9SIG9wZXJhdG9yLiAKKiBgZ3N1YignXFxkKycsICdOVU0nLCB0ZXh0KWAKICAqIGBcXGRgIG1hdGNoZXMgZGlnaXQgY2hhcmFjdGVycy4gQWRkaW5nIGArYCBtYXRjaGVzIHNlcXVlbmNlcyBvZiBkaWdpdHMuCiAgKiBIZXJlLCB3ZSByZXBsYWNlIGRpZ2l0cyB3aXRoICdOVU0nLgoqIGBnc3ViKCdcXFxufFxccysnLCAnICcsIHN0cl90cmltKHRleHQpKSlgCgoKV2hhdCBlbHNlIG1pZ2h0IHdlIHdhbnQgdG8gZml4PyBMZXQncyBsb29rIGF0IHRoZSBiZWdpbm5pbmcgb2YgYSBmZXcgZG9jdW1lbnRzOgoKYGBge3J9CnN1YnN0cihkaHAkdGV4dFtjKDE6MywgNDAwOjQwMywgMjAwMDAsIDIwMDAyKV0sIDAsIDUwKQpgYGAKCjxicj4KCjxkaXYgY2xhc3M9ImFsZXJ0IGFsZXJ0LWRhbmdlciIgcm9sZT0iYWxlcnQiPgogIDxzdHJvbmc+UHJvYmxlbTo8L3N0cm9uZz4gSG93IGNvdWxkIHdlIHJlbW92ZSB0aGVzZSBzdHJpbmdzIGZyb20gZWFjaCBkb2N1bWVudD8KPC9kaXY+CgoKYGBge3J9CgojIEFkZCB0aGUgY29ycmVjdCByZWdleCBwYXR0ZXJucyB0byByZW1vdmUgJ01yLiBTcGVha2VyLCcsICdNci4gQ2hhaXJtYW4sJywgJ01ycy4gU3BlYWtlciwnICdNcnMuIENoYWlybWFuLCcgYW5kICdNYWRhbSBTcGVha2VyLCcgJ01hZGFtIENoYWlybWFuLCcgIApkaHAgPC0gZGhwICU+JQogIG11dGF0ZSh0ZXh0ID0gZ3N1YignJywgJycsIHRleHQpKQogICAgICAgICAKYGBgCgoKYGBge3IgdGVhY2hlcl9yZWdleF9jb2RlfQoKIyBBZGQgdGhlIGNvcnJlY3QgcmVnZXggcGF0dGVybnMgdG8gcmVtb3ZlICdNci4gU3BlYWtlciwnLCAnTXIuIENoYWlybWFuLCcsICdNcnMuIFNwZWFrZXIsJyAnTXJzLiBDaGFpcm1hbiwnIGFuZCAnTWFkYW0gU3BlYWtlciwnICdNYWRhbSBDaGFpcm1hbiwnICAKCnN1ZmZpeCA9IGMoJ1NwZWFrZXIsJywgJ0NoYWlybWFuLCcsICdDaGFpcndvbWFuLCcpCm1yID0gcGFzdGUoJ01yLicsIHN1ZmZpeCkKbXJzID0gcGFzdGUoJ01ycy4nLCBzdWZmaXgpCmludHJvX3N0cnMgPSBwYXN0ZShjKG1yLCBtcnMpLCBjb2xsYXBzZT0nfCcpCgpkaHAgPC0gZGhwICU+JQogIG11dGF0ZSh0ZXh0ID0gZ3N1YihpbnRyb19zdHJzLCAnJywgdGV4dCksCiAgICAgICAgIHRleHQgPXN0cl90cmltKHRleHQpKQogICAgICAgICAKYGBgCgoKYGBge3J9CnN1YnN0cihkaHAkdGV4dFtjKDE6MywgNDAwOjQwMywgMjAwMDAsIDIwMDAyKV0sIDAsIDUwKQpgYGAKCg==</div>
 
 
 

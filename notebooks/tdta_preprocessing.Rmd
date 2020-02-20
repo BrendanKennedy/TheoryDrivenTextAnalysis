@@ -28,7 +28,7 @@ knitr::opts_chunk$set(echo=F, message=F, warning=F)
 # Load packages 
 library(pacman)
 p_load(readr, dplyr, tidyr, ggplot2, pmr, jtools, knitr, reshape2, jsonlite, 
-       lubridate)
+       lubridate, stringr)
 
 ```
 
@@ -134,7 +134,7 @@ summary(dh)
 cat(paste('Speaker: ', dh$speaker[1], '\n\nSegment: ', dh$segment[1], sep=''))
 ```
 
-#### Data Formatting
+#### Date Formatting
 
 
 First, let's deal with the date field: 
@@ -166,12 +166,13 @@ Well, fortunately, each observation is associated with a URL. So, we can at leas
 dh$url[1]
 ```
 
-"https://www.congress.gov//congressional-record/1997/04/08/house-section/article/H1296-4"
+"https://www.congress.gov//congressional-record/1998/10/07/house-section/article/H9870-1"
 
-It looks like the correct date for the first is April 08, 1997. With that information, we can figure out what the timestamp *should* be (roughly):
+It looks like the correct date for the first is October 07, 1998. With that information, we can figure out what the timestamp *should* be (roughly):
+
 
 ```{r}
-should_be = as.numeric(as.POSIXct("1997-04-08", format="%Y-%m-%d"))
+should_be = as.numeric(as.POSIXct("1998-10-07", format="%Y-%m-%d"))
 is = dh$date[1]
 
 cat(paste('Should be: ', should_be, ' (Digits = ', nchar(should_be),')\n', 
@@ -194,17 +195,84 @@ dhp <- dh %>%
 dhp %>% select(date, url) %>% head()
 ```
 
+### Text Pre-processing
+
+#### Regex
+
+Next, we'll start to clean up our text data, which is contained in the `segments` field. First, let's look at a random document and see what we might need to clean:
+
+```{r}
+dhp$segment[100]
+```
+
+At least in this post, there are numbers, new line characters, `\n`, and some meaningless punctuation, e.g. '\'. To do this, we'll use regex and the function `gsub` which uses regex pattern matching to find patterns and replace them with a specified set of characters. 
+
 
 ```{r}
 dhp <- dhp %>%
-  filter(date >= as_datetime('1998-6-01') & date <= as_datetime('1999-07-01')) 
+  mutate(text = gsub('\\\\|/', '', segment), # Remove '\' and '/'
+         text = gsub('\\d+', 'NUM', text),
+         text = gsub('\\\n|\\s+', ' ', str_trim(text)))
+         
+         
+         
+```
+
+```{r}
+dhp$text[100]
+```
 
 
-  
+Let's unpack our regex operation: 
+
+* `gsub('\\\\|/', '', segment)` 
+  * We want to remove '\' and '/'. However, '\' is an escape character. '\\' is R's version of a special regex character, and '\\\' escapes the regex character. So, to capture '\', we need to use '\\\\'. 
+  * `|` functions as an OR operator. 
+* `gsub('\\d+', 'NUM', text)`
+  * `\\d` matches digit characters. Adding `+` matches sequences of digits.
+  * Here, we replace digits with 'NUM'.
+* `gsub('\\\n|\\s+', ' ', str_trim(text)))`
+
+
+What else might we want to fix? Let's look at the beginning of a few documents:
+
+```{r}
+substr(dhp$text[c(1:3, 400:403, 20000, 20002)], 0, 50)
+```
+
+<br>
+
+<div class="alert alert-danger" role="alert">
+  <strong>Problem:</strong> How could we remove these strings from each document?
+</div>
+
+
+```{r}
+
+# Add the correct regex patterns to remove 'Mr. Speaker,', 'Mr. Chairman,', 'Mrs. Speaker,' 'Mrs. Chairman,' and 'Madam Speaker,' 'Madam Chairman,'  
+dhp <- dhp %>%
+  mutate(text = gsub('', '', text))
+         
+```
+
+
+```{r teacher_regex_code}
+
+# Add the correct regex patterns to remove 'Mr. Speaker,', 'Mr. Chairman,', 'Mrs. Speaker,' 'Mrs. Chairman,' and 'Madam Speaker,' 'Madam Chairman,'  
+
+suffix = c('Speaker,', 'Chairman,', 'Chairwoman,')
+mr = paste('Mr.', suffix)
+mrs = paste('Mrs.', suffix)
+intro_strs = paste(c(mr, mrs), collapse='|')
+
+dhp <- dhp %>%
+  mutate(text = gsub(intro_strs, '', text),
+         text =str_trim(text))
+         
 ```
 
 
 ```{r}
-stream_out(dhp, file('data/tdta_house_data.json'))
+substr(dhp$text[c(1:3, 400:403, 20000, 20002)], 0, 50)
 ```
 
