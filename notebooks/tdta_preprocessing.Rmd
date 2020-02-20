@@ -111,8 +111,8 @@ Our data has a JSONL format. To load it, we will use the `stream_in` function fr
 The `stream_in` function will read the JSONL file and store it in an R data.frame object.
 
 
-```{r, echo=T,message=F}
-dh <- stream_in(file("data/house_merged.json"))
+```{r, echo=T,message=F, results='hide'}
+dh <- stream_in(file("../data/tdta_house_data.json"))
 
 ```
 
