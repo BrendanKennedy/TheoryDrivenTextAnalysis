@@ -139,7 +139,7 @@ cat(paste('Speaker: ', dh$speaker[1], '\n\nSegment: ', dh$segment[1], sep=''))
 
 First, let's deal with the date field: 
 
-```{r}
+```{r, echo=T}
 head(dh$date)
 ```
 
@@ -150,7 +150,7 @@ head(dh$date)
 
 We can use the `as_date` function from the `lubridate` package to convert the UNIX timestamps to human-readable date objects:
 
-```{r}
+```{r, echo=T}
 dhp <- dh %>%
   mutate(raw_date = date,
          date = lubridate::as_datetime(date))
@@ -171,7 +171,7 @@ dh$url[1]
 It looks like the correct date for the first is October 07, 1998. With that information, we can figure out what the timestamp *should* be (roughly):
 
 
-```{r}
+```{r, echo=T}
 should_be = as.numeric(as.POSIXct("1998-10-07", format="%Y-%m-%d"))
 is = dh$date[1]
 
@@ -181,13 +181,13 @@ cat(paste('Should be: ', should_be, ' (Digits = ', nchar(should_be),')\n',
 
 It looks like we're off by about three orders of magnitude. If we fix this, do we get the right date?
 
-```{r}
+```{r, echo=T}
 as_datetime(is/1000)
 ```
 
 Let's try this for all the data and hand check a few cases:
 
-```{r}
+```{r, echo=T}
 dhp <- dh %>%
   mutate(raw_date = date,
          date = lubridate::as_datetime(date/1000))
@@ -201,14 +201,14 @@ dhp %>% select(date, url) %>% head()
 
 Next, we'll start to clean up our text data, which is contained in the `segments` field. First, let's look at a random document and see what we might need to clean:
 
-```{r}
+```{r, echo=T}
 dhp$segment[100]
 ```
 
 At least in this post, there are numbers, new line characters, `\n`, and some meaningless punctuation, e.g. '\'. To do this, we'll use regex and the function `gsub` which uses regex pattern matching to find patterns and replace them with a specified set of characters. 
 
 
-```{r}
+```{r, echo=T}
 dhp <- dhp %>%
   mutate(text = gsub('\\\\|/', '', segment), # Remove '\' and '/'
          text = gsub('\\d+', 'NUM', text),
@@ -218,7 +218,7 @@ dhp <- dhp %>%
          
 ```
 
-```{r}
+```{r, echo=T}
 dhp$text[100]
 ```
 
@@ -236,7 +236,7 @@ Let's unpack our regex operation:
 
 What else might we want to fix? Let's look at the beginning of a few documents:
 
-```{r}
+```{r, echo=T}
 substr(dhp$text[c(1:3, 400:403, 20000, 20002)], 0, 50)
 ```
 
@@ -247,7 +247,7 @@ substr(dhp$text[c(1:3, 400:403, 20000, 20002)], 0, 50)
 </div>
 
 
-```{r}
+```{r, echo=T}
 
 # Add the correct regex patterns to remove 'Mr. Speaker,', 'Mr. Chairman,', 'Mrs. Speaker,' 'Mrs. Chairman,' and 'Madam Speaker,' 'Madam Chairman,'  
 dhp <- dhp %>%
@@ -256,7 +256,7 @@ dhp <- dhp %>%
 ```
 
 
-```{r teacher_regex_code}
+```{r teacher_regex_code, echo=T}
 
 # Add the correct regex patterns to remove 'Mr. Speaker,', 'Mr. Chairman,', 'Mrs. Speaker,' 'Mrs. Chairman,' and 'Madam Speaker,' 'Madam Chairman,'  
 
@@ -272,7 +272,20 @@ dhp <- dhp %>%
 ```
 
 
-```{r}
+```{r, echo=T}
 substr(dhp$text[c(1:3, 400:403, 20000, 20002)], 0, 50)
 ```
+
+### Save data
+
+Finally, let's dropped unnecessary columns and save our data:
+
+
+
+```{r}
+dhp %>%
+  select(-segment, url, raw_date, session) %>%
+  saveRDS('../data/tdta_clean_house_data.RDS')
+```
+
 
