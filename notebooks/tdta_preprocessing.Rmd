@@ -28,7 +28,7 @@ knitr::opts_chunk$set(echo=F, message=F, warning=F)
 # Load packages 
 library(pacman)
 p_load(readr, dplyr, tidyr, ggplot2, pmr, jtools, knitr, reshape2, jsonlite, 
-       lubridate, stringr, tidytext)
+       lubridate, stringr, tidytext, fst)
 
 ```
 
@@ -318,11 +318,13 @@ dhp %>%
   saveRDS('../data/tdta_clean_house_data.RDS')
 ```
 
-Now, let's create a new dataframe with tidy text data using words as units.
+Now, let's create a new dataframe with tidy text data using words as units. We'll also save this object for later use.
 
 ```{r, echo=T}
 dat_tt_words <- dhp %>%
   unnest_tokens(word, text, token='words')
+
+write.fst(dat_tt_words, '../data/tdta_clean_house_data_tidy.fst')
 
 ```
 
