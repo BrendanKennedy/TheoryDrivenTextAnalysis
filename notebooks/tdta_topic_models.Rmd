@@ -1,0 +1,615 @@
+---
+title: "Theory Driven Text Analysis Workshop"
+subtitle: "Topic Models\n\nSPSP 2020"
+author: 
+  name: "Joe Hoover & Brendan Kennedy"
+  email: "joseph.hoover@kellogg.northwestern.edu\n\nbtkenned@usc.edu"
+output:
+  html_notebook:
+    toc: yes
+---
+
+
+```{r, echo=F, message=F, warning=F}
+# Define chunk options
+knitr::opts_chunk$set(echo=T, message=F, warning=F)
+```
+
+```{r, message=F,  echo=F}
+# Load packages 
+library(pacman)
+p_load(readr, dplyr, tidyr, ggplot2, pmr, jtools, knitr, reshape2, jsonlite, 
+       lubridate, stringr, tidytext, fst, textstem, tm, quanteda, topicmodels, textmineR,
+       LDAvis, stm)
+
+# If error on install topic models, this post might help:
+# https://stackoverflow.com/questions/25759007/error-installing-topicmodels-package-non-zero-exit-status-ubuntu
+
+```
+
+# Data Preparation
+
+First, we'll load the tidy-format version of our data.
+```{r}
+
+dat_tt_words <- read.fst('../data/tdta_clean_house_data_tidy.fst')
+
+```
+
+Next, we'll remove stop-words and lemmatize.
+
+```{r}
+
+dat_tt_words.cln <- dat_tt_words %>%
+  anti_join(stop_words) %>% # Drop stop words
+  filter(word != 'num') %>% # Drop token that we used to represent numbers 
+  mutate(word_lemma = textstem::lemmatize_words(word)) # lemmatize
+
+```
+
+Now, we'll calculate word counts. Here, we'll count by doc_num, Party, and date in order to preserve these variables; however, what we're really interested in is the counts of each token for each document. Because all documents have only one value of Party and date, conditioning the count on these variables doesn't change our calculations. 
+
+```{r}
+
+
+dat_tt_words.cln <- dat_tt_words.cln %>% 
+  count(doc_num, Party, date, word_lemma)
+
+  
+```
+
+Now, we'll subset our data. Specifically, we will focus on documents generated between September, 1998 and January, 1999.  
+
+
+```{r}
+dat_tt_words.cln.samp <- dat_tt_words.cln %>%
+  filter(date >= as_datetime('1998-09-01') & date <= as_datetime('1999-01-31'))
+
+dat_tt_words.cln.samp %>%
+  distinct(Party, doc_num) %>%
+  count(Party)
+
+```
+
+Subsetting on this date range yields about 8,800 documents with roughly even samples for Republicans and Democrats. However, there are only 42 documents associated with Independents. For simplicity, we'll focus only on Democrats and Republicans. 
+
+
+```{r}
+doc_ids <- unique(dat_tt_words.cln$doc_num)
+
+n_docs = 1000
+set.seed(1231)
+doc_ids_samp = sample(doc_ids, n_docs)
+
+dat_tt_words.cln.samp <- dat_tt_words.cln %>%
+  filter(doc_num %in% doc_ids_samp)
+
+```
+
+
+```{r}
+
+# Cast to sparse matrix, which is valid for textmineR
+dat_dtm <- dat_tt_words.cln.samp %>%
+  cast_sparse(doc_num, word_lemma, value=n)
+
+# User textminor function TermDocFreq to extract term and document frequencies
+tf <- TermDocFreq(dtm = dat_dtm)
+
+# Exclude words that don't occur in at least five percent of documents.
+
+
+words_to_keep <- tf %>%
+  mutate(doc_prop = doc_freq/n_docs) %>%
+  filter(doc_prop >= .05)
+
+dat_tt_words.cln.samp <- dat_tt_words.cln.samp %>%
+  filter(word_lemma %in% words_to_keep$term)
+
+```
+
+
+```{r}
+
+dat_dtm <- dat_tt_words.cln.samp %>%
+  cast_dtm(doc_num, word_lemma, value=n)
+
+```
+
+
+## Topic Modeling
+
+* Every document is a mixture of topics
+* Every topic is a mixture of words
+
+
+The goal of topic modeling is:
+
+* Given:
+    * the above assumptions
+    * a set of documents containing words
+* Infer which words are associated with which topics
+* AND infer which documents are associated with which documents
+
+
+<img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Smoothed_LDA.png" alt=""/>
+
+* $\alpha$ is the parameter of the Dirichlet prior on the per-document topic distributions
+* $\beta$ is the parameter of the Dirichlet prior on the per-topic word distribution
+* $\theta_m$ is the topic distribution for document m
+* $\phi_k$ is the word distribution for topic k
+* $z_{mn}$ is the topic for the n-th word in document m
+* $w_{mn}$ is the specific word.
+
+
+### Fitting a LDA model
+
+```{r}
+
+
+dat_samp.lda <- LDA(dat_dtm, k = 20, control = list(seed = 1234))
+
+
+```
+
+```{r}
+topicmodels2LDAvis <- function(x, ...){
+  post <- topicmodels::posterior(x)
+  if (ncol(post[["topics"]]) < 3) stop("The model must contain > 2 topics")
+  mat <- x@wordassignments
+  LDAvis::createJSON(
+    phi = post[["terms"]], 
+    theta = post[["topics"]],
+    vocab = colnames(post[["terms"]]),
+    doc.length = slam::row_sums(mat, na.rm = TRUE),
+    term.frequency = slam::col_sums(mat, na.rm = TRUE)
+  )
+}
+
+serVis(topicmodels2LDAvis(dat_samp.lda))
+```
+
+
+```{r}
+if (require(topicmodels) != T) {
+  install.packages('topicmodels')
+  require(topicmodels)
+}
+
+if (require(gridExtra) != T) {
+  install.packages('gridExtra')
+  require(gridExtra)
+}
+
+if (require(lsa) != T) {
+  install.packages('lsa')
+  require(lsa)
+}
+
+install.packages("ggwordcloud")
+install.packages('LSAfun')
+
+library(tidyverse)
+library(tidytext)
+library(quanteda)
+library(tm)
+
+song_dat <- read_csv('songdata.csv') %>%
+  select(-link)
+
+```
+
+
+
+
+```{r}
+
+song_words <- song_dat %>%
+  unnest_tokens(word, text) %>%
+  count(artist, word, sort = TRUE) %>%
+  ungroup()
+
+total_words <- song_words %>%
+  group_by(artist) %>%
+  summarize(total = sum(n))
+
+song_words <- left_join(song_words, total_words)
+
+```
+
+
+## Topic Modeling
+
+* Every document is a mixture of topics
+* Every topic is a mixture of words
+
+
+The goal of topic modeling is:
+
+* Given:
+    * the above assumptions
+    * a set of documents containing words
+* Infer which words are associated with which topics
+* AND infer which documents are associated with which documents
+
+
+<img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Smoothed_LDA.png" alt=""/>
+
+* $\alpha$ is the parameter of the Dirichlet prior on the per-document topic distributions
+* $\beta$ is the parameter of the Dirichlet prior on the per-topic word distribution
+* $\theta_m$ is the topic distribution for document m
+* $\phi_k$ is the word distribution for topic k
+* $z_{mn}$ is the topic for the n-th word in document m
+* $w_{mn}$ is the specific word.
+
+
+### Fitting a LDA model
+
+To fit a topic model using the `topicmodels` package, we need to construct a document-term matrix. I will also do a little bit of preprocessing, which reduces the dimensionality of the problem.
+
+The model takes a while to run, so I have commented out the fitting function and saved the final model as an RDS object. Rather than running it again, we can just load the RDS file.
+
+
+```{r}
+# sudo apt-get install gsl-bin libgsl0-dev
+#install.packages('topicmodels')
+library(topicmodels)
+
+song_words.dtm <- song_words %>%
+  anti_join(., stop_words) %>%
+  ungroup() %>%
+  group_by(word) %>%
+  mutate(n_total = n()) %>%
+  filter(n_total >= 10) %>%
+  cast_dtm(term=word, document=artist, value=n)
+
+
+
+# song_lda <- LDA(song_words.dtm, k = 20, control = list(seed = 1234))
+#saveRDS(song_lda, file='song_lda.RDS')
+
+song_lda <- readRDS('song_lda.RDS')
+```
+
+To investigate the word distributions for each topic, we can use `tidy` to extract and tidy the requisite parameter matrix, which is called beta in the `topicmodels` package.
+
+```{r}
+song_topics <- tidy(song_lda, matrix = "beta")
+song_topics
+```
+
+
+
+
+
+
+
+
+
+# OLD
+
+<!-- ```{r} -->
+<!-- song_words.dtm <- song_words %>% -->
+<!--   cast_dtm(term=word, document=artist, value=n) -->
+
+
+<!-- dim(song_words.dtm) -->
+<!-- dim(song_words.dtm) -->
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- song_words.dtm -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- terms <- Terms(song_words.dtm) -->
+<!-- head(terms) -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- song_words.dtm <- song_words %>% -->
+<!--   anti_join(., stop_words) %>% -->
+<!--   cast_dtm(term=word, document=artist, value=n) -->
+
+
+<!-- dim(song_words.dtm) -->
+<!-- dim(song_words.dtm) -->
+
+<!-- ``` -->
+
+
+
+<!-- ## Topic Modeling  -->
+
+<!-- * Every document is a mixture of topics -->
+<!-- * Every topic is a mixture of words -->
+
+
+<!-- The goal of topic modeling is:  -->
+
+<!-- * Given: -->
+<!--     * the above assumptions -->
+<!--     * a set of documents containing words -->
+<!-- * Infer which words are associated with which topics -->
+<!-- * AND infer which documents are associated with which documents -->
+
+
+<!-- <img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Smoothed_LDA.png" alt=""/> -->
+
+<!-- * $\alpha$ is the parameter of the Dirichlet prior on the per-document topic distributions -->
+<!-- * $\beta$ is the parameter of the Dirichlet prior on the per-topic word distribution -->
+<!-- * $\theta_m$ is the topic distribution for document m -->
+<!-- * $\phi_k$ is the word distribution for topic k -->
+<!-- * $z_{mn}$ is the topic for the n-th word in document m -->
+<!-- * $w_{mn}$ is the specific word. -->
+
+
+<!-- ### Fitting a LDA model -->
+
+<!-- ```{r} -->
+<!-- # sudo apt-get install gsl-bin libgsl0-dev -->
+<!-- install.packages('topicmodels') -->
+<!-- library(topicmodels) -->
+
+<!-- song_lda <- LDA(song_words.dtm, k = 10, control = list(seed = 1234)) -->
+<!-- song_lda -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- if (require(topicmodels) != T) { -->
+<!--   install.packages('topicmodels') -->
+<!--   require(topicmodels) -->
+<!-- }  -->
+
+<!-- if (require(gridExtra) != T) { -->
+<!--   install.packages('gridExtra') -->
+<!--   require(gridExtra) -->
+<!-- }  -->
+
+<!-- if (require(lsa) != T) { -->
+<!--   install.packages('lsa') -->
+<!--   require(lsa) -->
+<!-- }  -->
+
+<!-- install.packages("ggwordcloud") -->
+<!-- install.packages('LSAfun') -->
+
+<!-- library(tidyverse) -->
+<!-- library(tidytext) -->
+<!-- library(quanteda) -->
+<!-- library(tm) -->
+
+<!-- song_dat <- read_csv('songdata.csv') %>% -->
+<!--   select(-link) -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+
+<!-- song_words <- song_dat %>% -->
+<!--   unnest_tokens(word, text) %>% -->
+<!--   count(artist, word, sort = TRUE) %>% -->
+<!--   ungroup() -->
+
+<!-- total_words <- song_words %>%  -->
+<!--   group_by(artist) %>%  -->
+<!--   summarize(total = sum(n)) -->
+
+<!-- song_words <- left_join(song_words, total_words) -->
+
+<!-- ``` -->
+
+
+<!-- ## Topic Modeling  -->
+
+<!-- * Every document is a mixture of topics -->
+<!-- * Every topic is a mixture of words -->
+
+
+<!-- The goal of topic modeling is:  -->
+
+<!-- * Given: -->
+<!--     * the above assumptions -->
+<!--     * a set of documents containing words -->
+<!-- * Infer which words are associated with which topics -->
+<!-- * AND infer which documents are associated with which documents -->
+
+
+<!-- <img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Smoothed_LDA.png" alt=""/> -->
+
+<!-- * $\alpha$ is the parameter of the Dirichlet prior on the per-document topic distributions -->
+<!-- * $\beta$ is the parameter of the Dirichlet prior on the per-topic word distribution -->
+<!-- * $\theta_m$ is the topic distribution for document m -->
+<!-- * $\phi_k$ is the word distribution for topic k -->
+<!-- * $z_{mn}$ is the topic for the n-th word in document m -->
+<!-- * $w_{mn}$ is the specific word. -->
+
+
+<!-- ### Fitting a LDA model -->
+
+<!-- To fit a topic model using the `topicmodels` package, we need to construct a document-term matrix. I will also do a little bit of preprocessing, which reduces the dimensionality of the problem.  -->
+
+<!-- The model takes a while to run, so I have commented out the fitting function and saved the final model as an RDS object. Rather than running it again, we can just load the RDS file.  -->
+
+
+<!-- ```{r} -->
+<!-- # sudo apt-get install gsl-bin libgsl0-dev -->
+<!-- #install.packages('topicmodels') -->
+<!-- library(topicmodels) -->
+
+<!-- song_words.dtm <- song_words %>% -->
+<!--   anti_join(., stop_words) %>% -->
+<!--   ungroup() %>% -->
+<!--   group_by(word) %>% -->
+<!--   mutate(n_total = n()) %>% -->
+<!--   filter(n_total >= 10) %>% -->
+<!--   cast_dtm(term=word, document=artist, value=n) -->
+
+
+
+<!-- # song_lda <- LDA(song_words.dtm, k = 20, control = list(seed = 1234)) -->
+<!-- #saveRDS(song_lda, file='song_lda.RDS') -->
+
+<!-- song_lda <- readRDS('song_lda.RDS') -->
+<!-- ``` -->
+
+<!-- To investigate the word distributions for each topic, we can use `tidy` to extract and tidy the requisite parameter matrix, which is called beta in the `topicmodels` package.  -->
+
+<!-- ```{r} -->
+<!-- song_topics <- tidy(song_lda, matrix = "beta") -->
+<!-- song_topics -->
+<!-- ``` -->
+
+
+
+
+
+<!-- ```{r} -->
+<!-- library(ggwordcloud) -->
+
+<!-- song_topics %>% -->
+<!--   group_by(topic) %>% -->
+<!--   top_n(20, beta) %>% -->
+<!--   filter(topic %in% 1:4) %>% -->
+<!--   ggplot(aes(label=term, size=beta)) + -->
+<!--   geom_text_wordcloud_area(shape='square') +  -->
+<!--   scale_size_area(max_size = 20) + -->
+<!--   theme_minimal() +  -->
+<!--   facet_wrap(~topic) -->
+
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- song_topics %>% -->
+<!--   group_by(topic) %>% -->
+<!--   top_n(20, beta) %>% -->
+<!--   filter(topic %in% 5:8) %>% -->
+<!--   ggplot(aes(label=term, size=beta)) + -->
+<!--   geom_text_wordcloud_area(shape='square') +  -->
+<!--   scale_size_area(max_size = 20) + -->
+<!--   theme_minimal() +  -->
+<!--   facet_wrap(~topic) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- song_topics %>% -->
+<!--   group_by(topic) %>% -->
+<!--   top_n(20, beta) %>% -->
+<!--   filter(topic %in% 9:12) %>% -->
+<!--   ggplot(aes(label=term, size=beta)) + -->
+<!--   geom_text_wordcloud_area(shape='square') +  -->
+<!--   scale_size_area(max_size = 20) + -->
+<!--   theme_minimal() +  -->
+<!--   facet_wrap(~topic) -->
+<!-- ``` -->
+
+
+<!-- Some topics seem to be redundant, at least based on the top 20 words. To get a better idea of what distinguishes two topics, we can look at the words that have the highest relative probability in one topic, compared to another. For example, we can do this for topics 7 and 11: -->
+
+
+<!-- ```{r} -->
+
+<!--  song_topics %>% -->
+<!--   filter(topic %in% c(7, 11)) %>% -->
+<!--   mutate(topic = paste0("topic", topic)) %>% -->
+<!--   spread(topic, beta) %>% -->
+<!--   filter(topic11 > .001 | topic7 > .001) %>% -->
+<!--   mutate(log_ratio = log2(topic7 / topic11), -->
+<!--          abs_log_ratio = abs(log_ratio),  -->
+<!--          is_neg = ifelse(log_ratio > 0, 0, 1)) %>% -->
+<!--   group_by(is_neg) %>% -->
+<!--   top_n(10, abs_log_ratio) %>% -->
+<!--   ggplot(aes(x = reorder(term, desc(log_ratio)), y = log_ratio)) + geom_col() + coord_flip() -->
+
+
+<!-- ``` -->
+
+<!-- What does this graph tell us? -->
+
+<!-- ### Investigating the distribution of topics over documents -->
+
+<!-- We can also identify the most likely topics for a given document (or artist, in our case):  -->
+
+<!-- ```{r} -->
+<!-- song_artists <- tidy(song_lda, matrix = "gamma") -->
+<!-- song_artists -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- song_artists %>% -->
+<!--   arrange(document, desc(gamma)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- library(gridExtra) -->
+<!-- install.packages("ggpubr") -->
+<!-- library(ggpubr) -->
+
+<!-- summarize_artist <- function(artist, n_topics=4, n_words=20, max_size=20, song_topics, song_artists){ -->
+
+<!--   topic_probs <- song_artists %>% -->
+<!--     filter(document == artist) %>% -->
+<!--     top_n(n_topics, gamma) -->
+
+<!--   wc <- song_topics %>% -->
+<!--     ungroup() %>% -->
+<!--     dplyr::filter(topic %in% topic_probs$topic) %>% -->
+<!--     mutate(topic = paste0("topic", topic)) %>% -->
+<!--     group_by(topic) %>% -->
+<!--     top_n(n_words, beta) %>% -->
+<!--     ggplot(aes(label=term, size=beta)) + -->
+<!--     geom_text_wordcloud_area(shape='square') +  -->
+<!--     scale_size_area(max_size = max_size) + -->
+<!--     theme_minimal() +  -->
+<!--     facet_wrap(~topic)  -->
+
+<!--   tpp <- topic_probs %>% -->
+<!--     mutate(topic = paste0("topic", topic)) %>% -->
+<!--     ggplot(aes(y=gamma, x = reorder(topic, gamma))) +  -->
+<!--     geom_col(width = .1) + coord_flip() -->
+
+
+<!--   p <- grid.arrange(wc, tpp, ncol = 2, nrow = 1, widths = c(4,1.5), heights = c(4)) -->
+
+<!--    annotate_figure(p, -->
+<!--                top = text_grob(paste(artist, "'s", ' top ', n_topics, ' topics', sep=''), color = "black", face = "bold", size = 14)) -->
+
+<!-- } -->
+
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- summarize_artist('Slayer', n_topics = 4, n_words = 20, max_size=10, -->
+<!--                  song_artists = song_artists, song_topics = song_topics) -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- install.packages('ggfortify') -->
+<!-- library(ggfortify) -->
+<!-- library(tsne) -->
+<!-- library(plotly) -->
+<!-- #song_lda@gamma -->
+
+
+<!-- song_dat2 <- song_dat %>% -->
+<!--   distinct(artist, .keep_all=T) -->
+
+<!-- rownames(song_dat2) <- song_dat2$artist -->
+
+
+<!-- ggplotly(autoplot(prcomp(song_lda@gamma), data=song_dat2, label=TRUE)) -->
+
+
+<!-- ``` -->
