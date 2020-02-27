@@ -12,6 +12,15 @@ output:
 
 # Overview
 
+In this module, we will explore dictionary-based word count approaches text analysis measurement. 
+
+We will be working with U.S. House floor speeches spanning June 1998 through July 1999. More specifically, we will:
+
+(1) investigate variations in sentiment as a function of political party
+(2) explore sentiment dynamics in the context of President Bill Clinton's impeachment. 
+
+
+# Environment Preparation
 ```{r, echo=F, message=F, warning=F}
 # Define chunk options
 knitr::opts_chunk$set(echo=T, message=F, warning=F)
@@ -27,11 +36,742 @@ p_load(readr, dplyr, tidyr, ggplot2, jtools,
 
 # Data Preparation 
 
+In the preprocessing module (`../notebooks/tdta_preprocessing.Rmd`), we saved a tidy format data.frame containing our corpus. We'll use that as a starting point for our work in this module.
+
 ```{r}
 
-dat_tidy <- readRDS('../data/tdta_clean_house_data.RDS')
+dat_tidy <- readRDS('../data/tdta_clean_house_data_tidy.RDS')
+
+dat_tidy
 
 ```
 
 
-# 
+In this data.frame, words are stored in the cells of the column `word`. Accordingly, an entire document, identified by the unique document identifier `doc_num`, is stored across multiple rows. This data.frame also contains metadata like the name of the speaker associated with a given document, as well as the the speaker's party, district, and State.
+
+
+## Train/Test Split 
+
+If you have enough data, there's really _never_ any reason to not separate your data into a training set and testing set. Of course, determing how much data is *enough* can be tricky, because you don't want to create a situation where you are underpowered or unable to estimate a target parameter with sufficient precision. 
+
+However, treating documents as our units of observation, we have an $N = $ 35,959, which is certainly large enough for splitting.
+
+```{r}
+
+doc_ids <- unique(dat_tidy$doc_num) # Get document IDs
+
+n_docs = .50 * length(doc_ids) # Calculate number of documents to sample
+
+set.seed(5435) # set seed for reproducibility
+
+doc_ids_test = sample(doc_ids, n_docs) # sample document IDs for test data
+
+dat_tidy.train <- dat_tidy %>%
+  filter(doc_num %!in% doc_ids_test) # Select documents for training
+
+dat_tidy.test <- dat_tidy %>%
+  filter(doc_num %in% doc_ids_test) # Select documents for test
+
+
+```
+
+
+
+## Conducting Word counts
+
+### Introduction to dictionaries
+
+To conduct word count analyses, you need a *dictionary* or *lexicon* that specifies the words associated with your target construct(s). 
+
+To start, we'll work with the NRC sentiment dictionary, which is one of three sentiment dictionaries packaged with `tidytext`: 
+
+1. AFINN
+2. bing
+3. nrc
+
+To access the NRC dictionary, we'll use the `get_sentiments` function to store the NRC dictionary in an object called `nrc_sent`.
+
+```{r}
+nrc_sent <- get_sentiments('nrc')
+nrc_sent
+```
+
+`nrc_sent` contains two columns, `word`, which contains the words in the dictionary, and `sentiment`, which specifies the sentiment label associated with the word. 
+
+```{r}
+nrc_sent %>%
+  count(sentiment)
+```
+
+The NRC dictionary contains 10 sentiment categories and each of these categories have varying numbers of words associated with them. 
+
+Let's take a glance at first words in each category by spreading our tidy data.frame:
+
+```{r}
+nrc_sent %>%
+  group_by(sentiment) %>% 
+  mutate(temp_id = row_number()) %>% # Create a temporary ID to weight top_n by
+  top_n(n = -50, wt=temp_id) %>%     # Get first 50 items in each group 
+  mutate(temp_id = row_number()) %>% # Create a temporary unique ID for each word in each group
+  ungroup() %>%
+  pivot_wider(names_from = sentiment, values_from = word) %>% # Spread our data
+  select(-temp_id)
+```
+
+
+Glancing at these words, it's clear that words are repeated in some categories. 
+
+
+<br>
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What other characteristics stand out, if any?
+</div>
+
+### A cautionary note on word count validity
+
+One of the greatest strengths of dictionary-based text measurement methods is that they allow you to precisely define the construct you are interested in. This works extremely well when you are interested in specific words or types of words. 
+
+For example, if you are interested in *function words*, then it would never make sense to use anything other than a dictionary-based approach. Similarly, if you are truly interested in the usage of specific *positive* or *negative* words, then, again, it probably wouldn't make sense to use anything other than a dictionary approach. 
+
+In these examples, there is a 1:1 relationship between the target construct and the operationalization. However, this 1:1 relationship is difficult to maintain for more abstract constructs, like "positive sentiment" or "negative sentiment". In such cases, you (or someone else) has to decide which words evoke "positive sentiment" or "negative sentiment". 
+
+Further, we are often interested in expressions of meaning that may operate above the word level. For instance, consider the following example: 
+
+`Let's just say...I didn't love it'
+
+Most dictionary-based word count methods would estimate the sentiment expressed in this sentence as "positive" because of the token `love`. However, considering the entire *context* of this example, we can infer that the most likely sentiment is probably "negative". 
+
+In sum, dictionary-based word count approaches can be quite powerful; however, they have two notable shortcomings: 
+
+1. Dependence on dictionary validity
+2. Cannot account for context
+
+This *does not* mean that you shouldn't use dictionary-based word count methods. However, it *does* mean that you should keep these short comings in mind. And, even better, you should try to account for them through validation. 
+
+### `tidytext` word count sentiment analysis
+
+In principle, `tidytext` makes dictionary-based word count sentiment analysis quite simple. 
+
+To count the words we can just: 
+
+1. Conduct an `inner_join` between our data and our sentiment dictionary
+2. Count the matches
+
+We'll also divide the number of matches for each sentiment domain by the total number of words in our corpus. This will tell us the proportion associated with each sentiment domain.
+
+```{r}
+
+total_words = nrow(dat_tidy.train)
+
+dat_tidy.train %>%
+  inner_join(nrc_sent) %>%
+  count(sentiment) %>%
+  mutate(prop = n/total_words) %>%
+  arrange(desc(prop))
+
+```
+
+
+### Affective sentiment by Political Party
+
+We can also subset our data in order to ask more specific questions. For instance, we can easily estimate sentiment proportions for Democrats and Republicans.
+
+```{r}
+
+dat_tidy.train.sent <- dat_tidy.train %>%
+  group_by(Party) %>% # Group by Party
+  mutate(total_words = n()) %>% # Calculate the total words in each group
+  ungroup() %>% 
+  inner_join(nrc_sent) # Drop words that aren't in sentiment dictionary
+  
+dat_tidy.train.sent %>% count(total_words, Party, sentiment) %>% # Count the number of rows in each Party for each sentiment
+  mutate(prop = n/total_words) %>% # Calculate the proportion
+  arrange(desc(prop)) %>% # Arrange in descending order by proportion positive
+  select(-n, -total_words) %>%
+  pivot_wider(names_from='Party', values_from = 'prop')
+
+
+
+```
+
+
+Overall, it looks like there is very little mean sentiment variation between Republicans and Democrats. However, we've collapsed across documents. To get a better idea of how expressions of affective sentiment vary across Parties, let's visualize the distribution of sentiment in documents 
+
+
+
+```{r}
+ 
+dat_tidy.train.sent %>%
+  filter(Party !='Independent') %>%
+  count(total_words, Party, doc_num, sentiment) %>%
+  mutate(prop = n/total_words) %>%
+  ggplot(aes(y = prop, x = Party, color=Party)) + 
+  geom_jitter(alpha=.25) + 
+  facet_wrap(.~sentiment, ncol=5) + 
+  scale_colour_manual(values = c("blue", "red")) +
+  theme_apa() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ggtitle('Document-level proportions of sentiment words by party') + 
+  xlab('Party') + 
+  ylab('Proportion')
+
+```
+
+
+
+What if we look at the document *N*s of sentiment words instead of proportions?
+
+```{r}
+ 
+dat_tidy.train.sent %>%
+  filter(Party !='Independent') %>%
+  count(total_words, Party, doc_num, sentiment) %>%
+  mutate(prop = n/total_words) %>%
+  ggplot(aes(y = n, x = Party, color=Party)) + 
+  geom_jitter(alpha=.25) + 
+  facet_wrap(.~sentiment, ncol=5) + 
+  scale_colour_manual(values = c("blue", "red")) +
+  theme() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ggtitle('Document-level Ns of sentiment words by party') + 
+  xlab('Party') + 
+  ylab('N')
+
+```
+
+
+
+<br>
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> Why might we want to look at proportion vs. N (or vice versa)?
+</div>
+
+
+### Dynamics in affective sentiment by political party
+
+Clearly, there isn't much marginal between group variation in affective sentiment in this dataset. However, maybe there are interesting effects operating at other levels!
+
+Let's examine temporal variation in affective sentiment between parties. To do this, we will take a similar approach, but instead of counting the sentiment in each document, we'll count the sentiment on each observed day. 
+
+First, however, let's glance at the distribution of documents across time. For reference, let's also add vertical lines to indicate the dates on which Clinton's impeachment was iniated and voted on.
+
+
+
+```{r, fig.width=10}
+
+sent_time <- dat_tidy.train.sent %>%
+  filter(Party !='Independent') %>%
+  distinct(doc_num, .keep_all = T) %>%
+  count(date, Party) %>%
+  ggplot(aes(y = n, x = date, color=Party)) + 
+  geom_line(alpha=.5) + 
+  facet_wrap(Party ~. , ncol=1) +
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  geom_point() +
+  theme_apa() +
+  ggtitle('N of documents across time by party') +
+  ylab('N') + 
+  xlab('Date')
+
+ggplotly(sent_time)
+
+
+```
+
+Clearly, there is substantial variation in the number of documents (i.e. speeches given by individual speakers) across time. 
+
+
+<br>
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What are our sample sizes on the impeachment-relevant days?
+</div>
+
+
+
+Now, let's plot sentiment across time by party. 
+
+```{r, fig.height=10, fig.width=10}
+
+dat_tidy.train.sent %>%
+  filter(Party !='Independent') %>%
+  count(total_words, Party, date, sentiment) %>%
+  mutate(prop = n/total_words) %>%
+  ggplot(aes(y = n, x = date, color=Party)) + 
+  facet_wrap(sentiment~Party, ncol=4) + 
+  scale_colour_manual(values = c("blue", "red")) +
+  theme() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ggtitle('Document-level Ns of sentiment words by party') + 
+  xlab('Party') + 
+  ylab('N') + 
+  geom_smooth(color='black') +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2) +
+  geom_point(alpha=.25) 
+
+```
+
+
+
+```{r, fig.height=10, fig.width=10}
+
+dat_tidy.train.sent %>%
+  filter(Party !='Independent') %>%
+  count(total_words, Party, date, sentiment) %>%
+  mutate(prop = n/total_words) %>%
+  ggplot(aes(y = prop, x = date, color=Party)) + 
+  facet_wrap(sentiment~Party, ncol=4) + 
+  scale_colour_manual(values = c("blue", "red")) +
+  theme() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ggtitle('Document-level proportions of sentiment words by party') + 
+  xlab('Party') + 
+  ylab('N') + 
+  geom_smooth(color='black') +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2) +
+  geom_point(alpha=.25) 
+
+```
+
+
+<br>
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What can we learn from this figure?
+</div>
+
+## Hypothesis testing with word counts
+
+```{r}
+
+dat_tidy.train.speaker <- dat_tidy.train %>%
+  group_by(Party, speaker) %>%
+  mutate(speaker_total_words = n()) %>%
+  ungroup() %>%
+  inner_join(nrc_sent) %>%
+  count(Party, speaker, speaker_total_words, date, sentiment) %>%
+  group_by(speaker, sentiment) %>%
+  mutate(speaker_sent_means = mean(n), 
+         speaker_sent_cntr = n - speaker_sent_means)
+  
+```
+
+
+
+```{r}
+
+dat_tidy.train.speaker <- dat_tidy.train %>%
+  filter(Party != 'Independent') %>%
+  group_by(Party, speaker, date) %>%
+  mutate(speaker_day_n = n()) %>%
+  ungroup() %>%
+  inner_join(nrc_sent) %>%
+  count(Party, speaker, date, speaker_day_n, sentiment) %>%
+  mutate(speaker_day_sent_prop = n/speaker_day_n)
+
+
+
+
+# Create a date range from the min/max dates in our training data
+date_grid <- tibble(date = seq(min(dat_tidy.train.speaker$date), 
+                               max(dat_tidy.train.speaker$date), by='days')) %>%
+  mutate(date_int = row_number(), # Associate each date with an integer 
+         date_int_scaled = date_int/100)
+
+dat_tidy.train.speaker <- dat_tidy.train.speaker %>%
+  left_join(date_grid) %>%
+  mutate(date_int_scaled = date_int/100, 
+         impeachment_1 = ifelse(date == as_datetime('1998-10-08'), 1, 0),
+         impeachment_2 = ifelse(date == as_datetime('1998-12-19'), 1, 0))
+  
+```
+
+
+```{r}
+
+train.speaker.negative.m1 <- dat_tidy.train.speaker %>%
+  filter(sentiment=='negative') %>%
+  lmer(speaker_day_sent_prop ~ 1 + Party*impeachment_1 + Party*impeachment_2  + (1  | speaker) + (1 + Party | date_int), data=.)
+
+summary(train.speaker.negative.m1)
+
+```
+
+
+
+```{r}
+
+
+dat_tidy.train.speaker.pred_grid <- expand.grid(Party = unique(dat_tidy.train.speaker$Party), 
+            speaker = 'new_speaker', 
+            date_int = unique(dat_tidy.train.speaker$date_int))
+
+
+dat_tidy.train.speaker.pred_grid <- dat_tidy.train.speaker.pred_grid %>%
+  left_join(date_grid) %>%
+  mutate(impeachment_1 = ifelse(date == as_datetime('1998-10-08'), 1, 0),
+         impeachment_2 = ifelse(date == as_datetime('1998-12-19'), 1, 0))
+
+
+
+train.speaker.negative.m1.pred <- dat_tidy.train.speaker.pred_grid %>%
+  mutate(preds = predict(train.speaker.negative.m1, newdata=dat_tidy.train.speaker.pred_grid, allow.new.levels=T))
+  
+
+
+train.speaker.negative.m1.pred %>%
+  left_join(date_grid) %>%
+  ggplot(aes(x = date, y = preds, color=Party)) + 
+  geom_line() + 
+  geom_point(aes(y = preds), alpha=.25) +
+  theme_apa() + 
+  scale_colour_manual(values = c("blue", "red")) + 
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  ggtitle('Daily expected proportion of negative language for an average speaker' ) +
+  ylab('Speaker proportion negative language') + 
+  xlab('Date')
+
+  
+```
+
+
+
+## Disgust 
+
+```{r}
+
+
+train.speaker.disgust.m1 <- dat_tidy.train.speaker %>%
+  filter(sentiment=='disgust') %>%
+  lmer(speaker_day_sent_prop ~ 1 + Party*impeachment_1 + Party*impeachment_2  + (1  | speaker) + (1 + Party | date_int), data=.)
+
+summary(train.speaker.disgust.m1)
+
+
+
+train.speaker.disgust.m1.pred <- dat_tidy.train.speaker.pred_grid %>%
+  mutate(preds = predict(train.speaker.disgust.m1, newdata=dat_tidy.train.speaker.pred_grid, allow.new.levels=T))
+  
+
+
+train.speaker.disgust.m1.pred %>%
+  left_join(date_grid) %>%
+  ggplot(aes(x = date, y = preds, color=Party)) + 
+  geom_line() + 
+  geom_point(aes(y = preds), alpha=.25) +
+  theme_apa() + 
+  scale_colour_manual(values = c("blue", "red")) + 
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  ggtitle('Daily expected proportion of disgust language for an average speaker' ) +
+  ylab('Speaker proportion disgust language') + 
+  xlab('Date')
+
+
+```
+
+
+
+```{r}
+
+
+
+train.speaker.all.m1 <- dat_tidy.train.speaker %>%
+  lmer(speaker_day_sent_prop ~ 1 + Party*impeachment_1 + Party*impeachment_2  + (1 | speaker) + (1 + Party | date_int) + (1 + impeachment_1  + impeachment_2 | sentiment), data=.)
+
+summary(train.speaker.all.m1)
+
+
+dat_tidy.train.speaker.pred_grid.all_sent <- expand.grid(Party = unique(dat_tidy.train.speaker$Party), 
+            speaker = 'new_speaker', 
+            date_int = unique(dat_tidy.train.speaker$date_int),
+            sentiment=unique(dat_tidy.train.speaker$sentiment))
+
+
+dat_tidy.train.speaker.pred_grid.all_sent <- dat_tidy.train.speaker.pred_grid.all_sent %>%
+  left_join(date_grid) %>%
+  mutate(impeachment_1 = ifelse(date == as_datetime('1998-10-08'), 1, 0),
+         impeachment_2 = ifelse(date == as_datetime('1998-12-19'), 1, 0))
+
+
+train.speaker.all.m1.pred <- dat_tidy.train.speaker.pred_grid.all_sent %>%
+  mutate(preds = predict(train.speaker.all.m1, 
+                         newdata=dat_tidy.train.speaker.pred_grid.all_sent, 
+                         allow.new.levels=T))
+  
+
+```
+
+
+
+```{r, fig.width=10, fig.height=6}
+train.speaker.all.m1.pred %>%
+  left_join(date_grid) %>%
+  ggplot(aes(x = date, y = preds, color=Party)) + 
+  geom_line() + 
+  geom_point(aes(y = preds), alpha=.25) +
+  theme_apa() + 
+  scale_colour_manual(values = c("blue", "red")) + 
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  ggtitle('Daily expected proportion of disgust language for an average speaker' ) +
+  ylab('Speaker proportion disgust language') + 
+  xlab('Date') + facet_wrap(sentiment~., ncol=2)
+
+```
+
+
+
+```{r, fig.width=10, fig.height=6}
+train.speaker.all.m1.pred %>%
+  left_join(date_grid) %>%
+  ggplot(aes(x = date, y = preds, color=Party)) + 
+  geom_line() + 
+  geom_point(aes(y = preds), alpha=.25) +
+  theme_apa() + 
+  scale_colour_manual(values = c("blue", "red")) + 
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  ggtitle('Daily expected proportion of disgust language for an average speaker' ) +
+  ylab('Speaker proportion disgust language') + 
+  xlab('Date') + facet_wrap(sentiment~., ncol=2, scales='free_y')
+
+
+```
+
+
+
+```{r}
+sjPlot::plot_model(train.speaker.all.m1, type='re')[3]
+```
+
+
+## Confirmation 
+
+
+```{r}
+
+dat_tidy.test.speaker <- dat_tidy.test %>%
+  group_by(Party, speaker) %>%
+  mutate(speaker_total_words = n()) %>%
+  ungroup() %>%
+  inner_join(nrc_sent) %>%
+  count(Party, speaker, speaker_total_words, date, sentiment) %>%
+  group_by(speaker, sentiment)
+  
+```
+
+
+
+```{r}
+
+dat_tidy.test.speaker <- dat_tidy.test %>%
+  filter(Party != 'Independent') %>%
+  group_by(Party, speaker, date) %>%
+  mutate(speaker_day_n = n()) %>%
+  ungroup() %>%
+  inner_join(nrc_sent) %>%
+  count(Party, speaker, date, speaker_day_n, sentiment) %>%
+  mutate(speaker_day_sent_prop = n/speaker_day_n)
+
+
+
+
+# Create a date range from the min/max dates in our testing data
+date_grid <- tibble(date = seq(min(dat_tidy.test.speaker$date), 
+                               max(dat_tidy.test.speaker$date), by='days')) %>%
+  mutate(date_int = row_number(), # Associate each date with an integer 
+         date_int_scaled = date_int/100)
+
+dat_tidy.test.speaker <- dat_tidy.test.speaker %>%
+  left_join(date_grid) %>%
+  mutate(date_int_scaled = date_int/100, 
+         impeachment_1 = ifelse(date == as_datetime('1998-10-08'), 1, 0),
+         impeachment_2 = ifelse(date == as_datetime('1998-12-19'), 1, 0))
+  
+```
+
+
+```{r}
+
+test.speaker.negative.m1 <- dat_tidy.test.speaker %>%
+  filter(sentiment=='negative') %>%
+  lmer(speaker_day_sent_prop ~ 1 + Party*impeachment_1 + Party*impeachment_2  + (1  | speaker) + (1 + Party | date_int), data=.)
+
+summary(test.speaker.negative.m1)
+
+```
+
+
+
+```{r}
+
+
+dat_tidy.test.speaker.pred_grid <- expand.grid(Party = unique(dat_tidy.test.speaker$Party), 
+            speaker = 'new_speaker', 
+            date_int = unique(dat_tidy.test.speaker$date_int))
+
+
+dat_tidy.test.speaker.pred_grid <- dat_tidy.test.speaker.pred_grid %>%
+  left_join(date_grid) %>%
+  mutate(impeachment_1 = ifelse(date == as_datetime('1998-10-08'), 1, 0),
+         impeachment_2 = ifelse(date == as_datetime('1998-12-19'), 1, 0))
+
+
+
+test.speaker.negative.m1.pred <- dat_tidy.test.speaker.pred_grid %>%
+  mutate(preds = predict(test.speaker.negative.m1, newdata=dat_tidy.test.speaker.pred_grid, allow.new.levels=T))
+  
+
+
+test.speaker.negative.m1.pred %>%
+  left_join(date_grid) %>%
+  ggplot(aes(x = date, y = preds, color=Party)) + 
+  geom_line() + 
+  geom_point(aes(y = preds), alpha=.25) +
+  theme_apa() + 
+  scale_colour_manual(values = c("blue", "red")) + 
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  ggtitle('Daily expected proportion of negative language for an average speaker' ) +
+  ylab('Speaker proportion negative language') + 
+  xlab('Date')
+
+  
+```
+
+
+
+## Disgust 
+
+```{r}
+
+
+test.speaker.disgust.m1 <- dat_tidy.test.speaker %>%
+  filter(sentiment=='disgust') %>%
+  lmer(speaker_day_sent_prop ~ 1 + Party*impeachment_1 + Party*impeachment_2  + (1  | speaker) + (1 + Party | date_int), data=.)
+
+summary(test.speaker.disgust.m1)
+
+
+
+test.speaker.disgust.m1.pred <- dat_tidy.test.speaker.pred_grid %>%
+  mutate(preds = predict(test.speaker.disgust.m1, newdata=dat_tidy.test.speaker.pred_grid, allow.new.levels=T))
+  
+
+
+test.speaker.disgust.m1.pred %>%
+  left_join(date_grid) %>%
+  ggplot(aes(x = date, y = preds, color=Party)) + 
+  geom_line() + 
+  geom_point(aes(y = preds), alpha=.25) +
+  theme_apa() + 
+  scale_colour_manual(values = c("blue", "red")) + 
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  ggtitle('Daily expected proportion of disgust language for an average speaker' ) +
+  ylab('Speaker proportion disgust language') + 
+  xlab('Date')
+
+
+```
+
+
+
+```{r}
+
+
+
+test.speaker.all.m1 <- dat_tidy.test.speaker %>%
+  lmer(speaker_day_sent_prop ~ 1 + Party*impeachment_1 + Party*impeachment_2  + (1 | speaker) + (1 + Party | date_int) + (1 + impeachment_1  + impeachment_2 | sentiment), data=.)
+
+summary(test.speaker.all.m1)
+
+
+dat_tidy.test.speaker.pred_grid.all_sent <- expand.grid(Party = unique(dat_tidy.test.speaker$Party), 
+            speaker = 'new_speaker', 
+            date_int = unique(dat_tidy.test.speaker$date_int),
+            sentiment=unique(dat_tidy.test.speaker$sentiment))
+
+
+dat_tidy.test.speaker.pred_grid.all_sent <- dat_tidy.test.speaker.pred_grid.all_sent %>%
+  left_join(date_grid) %>%
+  mutate(impeachment_1 = ifelse(date == as_datetime('1998-10-08'), 1, 0),
+         impeachment_2 = ifelse(date == as_datetime('1998-12-19'), 1, 0))
+
+
+test.speaker.all.m1.pred <- dat_tidy.test.speaker.pred_grid.all_sent %>%
+  mutate(preds = predict(test.speaker.all.m1, 
+                         newdata=dat_tidy.test.speaker.pred_grid.all_sent, 
+                         allow.new.levels=T))
+  
+
+```
+
+
+
+```{r, fig.width=10, fig.height=6}
+test.speaker.all.m1.pred %>%
+  left_join(date_grid) %>%
+  ggplot(aes(x = date, y = preds, color=Party)) + 
+  geom_line() + 
+  geom_point(aes(y = preds), alpha=.25) +
+  theme_apa() + 
+  scale_colour_manual(values = c("blue", "red")) + 
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  ggtitle('Daily expected proportion of disgust language for an average speaker' ) +
+  ylab('Speaker proportion disgust language') + 
+  xlab('Date') + facet_wrap(sentiment~., ncol=2)
+
+```
+
+
+
+```{r, fig.width=10, fig.height=6}
+test.speaker.all.m1.pred %>%
+  left_join(date_grid) %>%
+  ggplot(aes(x = date, y = preds, color=Party)) + 
+  geom_line() + 
+  geom_point(aes(y = preds), alpha=.25) +
+  theme_apa() + 
+  scale_colour_manual(values = c("blue", "red")) + 
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  ggtitle('Daily expected proportion of disgust language for an average speaker' ) +
+  ylab('Speaker proportion disgust language') + 
+  xlab('Date') + facet_wrap(sentiment~., ncol=2, scales='free_y')
+
+
+```
+
+
+
+```{r}
+sjPlot::plot_model(test.speaker.all.m1, type='re')[3]
+```
+
+
+
+### Validating dictionaries 
+
+One of the greatest strengths of dictionary-based text measurement methods is that they allow you to precisely define the construct you are interested in. This works extremely well when you are interested in specific words or types of words. 
+
+For example, if you are interested in *function words*, then it would never make sense to use anything other than a dictionary-based approach. Similarly, if you are truly interested in the usage of *positive* or *negative* words, then, again, it probably wouldn't make sense to use anything other than a dictionary approach. 
+
+However, 

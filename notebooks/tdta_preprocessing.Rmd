@@ -473,6 +473,7 @@ dat_tt_words.cl <- dat_tt_words.cl %>%
 
 
 ```{r, echo=T}
+
 dat_tt_words.cl %>%
   filter(Party != 'Independent') %>%
   group_by(Party) %>%
@@ -487,4 +488,5 @@ dat_tt_words.cl %>%
   theme_apa() +
   ggtitle('Top words with stopwords removed by party') +
   facet_wrap(Party~., ncol=1)
+
 ```
