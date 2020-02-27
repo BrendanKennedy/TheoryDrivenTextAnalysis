@@ -28,8 +28,7 @@ knitr::opts_chunk$set(echo=F, message=F, warning=F)
 # Load packages 
 library(pacman)
 p_load(readr, dplyr, tidyr, ggplot2, pmr, jtools, knitr, reshape2, jsonlite, 
-       lubridate, stringr, tidytext)
-
+       lubridate, stringr, tidytext, fst)
 ```
 
 
@@ -50,9 +49,11 @@ With this much variation, the first challenge of text analysis is often figuring
 We can do that with the `readLines` function: 
 
 
+
+
+
 ```{r, echo=T}
 readLines('../data/tdta_house_data.json', n=1)
-
 ```
 
 <br>
@@ -76,13 +77,10 @@ JSON is a data storage format that is widely used for storing text data. It has 
 For example, 
 
 ```{r, eval=F, echo=T}
-
 # JSON eg 1
 {'name': 'joe',
  'city': 'chicago'
 } 
-
-
 #JSON eg 2
 {'name': c('joe', 'brendan'),
  'city': c('chicago', 'los angeles')
@@ -96,11 +94,9 @@ Often, a collection of data or a corpus of text is stored in multiple JSON objec
 For example, a file containing the json objects below would be a JSONL format data object:
 
 ```{r, eval=F, echo=T}
-
 # JSON eg 1
 {'name': 'joe', 'city': 'chicago', 'text': 'Hi'} 
 {'name': 'brendan', 'city': 'los angeles', 'text': 'Howdy'} 
-
 ```
 
 
@@ -113,7 +109,6 @@ The `stream_in` function will read the JSONL file and store it in an R data.fram
 
 ```{r, echo=T,message=F, results='hide'}
 dh <- stream_in(file("../data/tdta_house_data.json"))
-
 ```
 
 # Processing Workshop Data
@@ -154,7 +149,6 @@ We can use the `as_date` function from the `lubridate` package to convert the UN
 dhp <- dh %>%
   mutate(raw_date = date,
          date = lubridate::as_datetime(date))
-
 head(dhp$date)
 ```
 
@@ -174,7 +168,6 @@ It looks like the correct date for the first is October 07, 1998. With that info
 ```{r, echo=T}
 should_be = as.numeric(as.POSIXct("1998-10-07", format="%Y-%m-%d"))
 is = dh$date[1]
-
 cat(paste('Should be: ', should_be, ' (Digits = ', nchar(should_be),')\n', 
           'Is: ', is, ' (Digits = ', nchar(is),')\n', sep=''))
 ```
@@ -191,9 +184,9 @@ Let's try this for all the data and hand check a few cases:
 dhp <- dh %>%
   mutate(raw_date = date,
          date = lubridate::as_datetime(date/1000))
-
 dhp %>% select(date, url) %>% head()
 ```
+
 
 ## Text Pre-processing
 
@@ -248,7 +241,6 @@ substr(dhp$text[c(1:3, 400:403, 20000, 20002)], 0, 50)
 
 
 ```{r, echo=T}
-
 # Add the correct regex patterns to remove 'Mr. Speaker,', 'Mr. Chairman,', 'Mrs. Speaker,' 'Mrs. Chairman,' and 'Madam Speaker,' 'Madam Chairman,'  
 dhp <- dhp %>%
   mutate(text = gsub('', '', text))
@@ -257,14 +249,11 @@ dhp <- dhp %>%
 
 
 ```{r teacher_regex_code, echo=T}
-
 # Add the correct regex patterns to remove 'Mr. Speaker,', 'Mr. Chairman,', 'Mrs. Speaker,' 'Mrs. Chairman,' and 'Madam Speaker,' 'Madam Chairman,'  
-
 suffix = c('Speaker,', 'Chairman,', 'Chairwoman,')
 mr = paste('Mr.', suffix)
 mrs = paste('Mrs.', suffix)
 intro_strs = paste(c(mr, mrs), collapse='|')
-
 dhp <- dhp %>%
   mutate(text = gsub(intro_strs, '', text),
          text =str_trim(text))
@@ -284,6 +273,7 @@ Finally, if you look long enough, you'll notice quite a few HTML tags, like `<a 
 dhp <- dhp %>%
   mutate(text = gsub('<.*?>', '', text))
 ```
+
 
 ### `tidytext`
 
@@ -313,16 +303,18 @@ We can convert our data to tidytext format using the `unnest_tokens` function. F
 ```{r}
 dhp <- dhp %>%
   select(-segment, -url, -raw_date, -session) 
-
 dhp %>%
   saveRDS('../data/tdta_clean_house_data.RDS')
 ```
 
-Now, let's create a new dataframe with tidy text data using words as units.
+Now, let's create a new dataframe with tidy text data using words as units. We'll also save this object for later use.
 
 ```{r, echo=T}
 dat_tt_words <- dhp %>%
   unnest_tokens(word, text, token='words')
+
+
+saveRDS(dat_tt_words, '../data/tdta_clean_house_data_tidy.RDS')
 
 ```
 
@@ -331,7 +323,6 @@ dat_tt_words <- dhp %>%
 dat_tt_words %>%
   select(speaker, word) %>% 
   head(8)
-
 ```
 
 ```{r}
@@ -368,7 +359,6 @@ dat_tt_words %>%
 We can also look at word frequencies by time and party:
 
 ```{r}
-
 dat_tt_words %>%
   group_by(date, Party) %>%
   tally() %>%
@@ -377,7 +367,6 @@ dat_tt_words %>%
   theme_apa() +
   ggtitle('House Speech Word Count by Day and Party') + 
   ylab('1k Words') + facet_wrap(Party~., ncol=1)
-
 ```
 
 
@@ -414,11 +403,9 @@ head(stop_words)
 
 
 ```{r}
-
 dat_tt_words.cl <- dat_tt_words %>%
   anti_join(stop_words) %>%
   filter(word != 'num')
-
 ```
 
 
@@ -479,10 +466,8 @@ dat_tt_words.cl %>%
 
 ```{r}
 `%!in%` <- Negate(`%in%`)
-
 dat_tt_words.cl <- dat_tt_words.cl %>%
   filter(word  %!in% c('gentleman', 'bill', 'time', 'committee', 'section', 'people', 'amendment', 'house', 'act', 'united', 'congress'))
-
 ```
 
 
@@ -503,5 +488,3 @@ dat_tt_words.cl %>%
   ggtitle('Top words with stopwords removed by party') +
   facet_wrap(Party~., ncol=1)
 ```
-
-

@@ -1,0 +1,878 @@
+---
+title: "Theory Driven Text Analysis Workshop"
+subtitle: "Topic Models\n\nSPSP 2020"
+author: 
+  name: "Joe Hoover & Brendan Kennedy"
+  email: "joseph.hoover@kellogg.northwestern.edu\n\nbtkenned@usc.edu"
+output:
+  html_notebook:
+    toc: yes
+---
+
+
+```{r, echo=F, message=F, warning=F}
+# Define chunk options
+knitr::opts_chunk$set(echo=T, message=F, warning=F)
+```
+
+```{r, message=F,  echo=F}
+# Load packages 
+library(pacman)
+p_load(readr, dplyr, tidyr, ggplot2, pmr, jtools, knitr, reshape2, jsonlite, 
+       lubridate, stringr, tidytext, fst, textstem, tm, quanteda, topicmodels, textmineR,
+       LDAvis, stm, furrr)
+
+# If error on install topic models, this post might help:
+# https://stackoverflow.com/questions/25759007/error-installing-topicmodels-package-non-zero-exit-status-ubuntu
+
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+```
+
+# Overview 
+
+In this module, we will learn how to work with structural topic models using the `stm` package. Structural topic models are useful for gaining insight into the structure of discourse in a particular corpus. For instance, you can use an STM to ask questions like:
+
+* What topics are relevant in a corpus
+* Does the distribution of topics change depending on key covariates (e.g. experimental condition, the political affiliation of the speaker, etc)
+* Does the content of a topic (i.e. it's distribution over words) change depending on key covariates
+
+In this case, we'll use STM models to investigate between-party differences in discourse related to President Bill Clinton's impeachment. Ultimately, Clinton was impeached by the House of Representatives. However, there was a strong partisan split in the vote, such that the majority of Democrats voted *against* impeachment and the majority of Republicans voted *for* impeachment. 
+
+Accordingly, we'll use an STM model to ask questions like:
+
+* When did documents (i.e. speeches) most relevant to impeachment occur?
+* Which party produced more documents related to impeachment?
+* What, if any, between party differences are there in discourse about impeachment?
+
+
+# Data Preparation
+
+First, we'll load the tidy-format version of our data.
+```{r}
+
+dat_tt_words <- readRDS('../data/tdta_clean_house_data_tidy.RDS')
+
+```
+
+
+Next, we'll remove stop-words and lemmatize.
+
+```{r}
+
+dat_tt_words.cln <- dat_tt_words %>%
+  anti_join(stop_words) %>% # Drop stop words
+  filter(word != 'num') %>% # Drop token that we used to represent numbers 
+  mutate(word_lemma = textstem::lemmatize_words(word)) # lemmatize
+
+```
+
+
+Now, we'll calculate word counts. Here, we'll count by doc_num, Party, and date in order to preserve these variables; however, what we're really interested in is the counts of each token for each document. Because all documents have only one value of Party and date, conditioning the count on these variables doesn't change our calculations. 
+
+```{r}
+
+
+dat_tt_words.cln <- dat_tt_words.cln %>% 
+  count(doc_num, Party, date, word_lemma)
+
+  
+```
+
+Now, we'll subset our data. Specifically, we will focus on documents generated between September, 1998 and January, 1999. For reference, the key moments in this data, with regard to Clinton's impeachment hearings, were in October and December of 1999.
+
+
+```{r}
+dat_tt_words.cln.samp <- dat_tt_words.cln %>%
+  filter(date >= as_datetime('1998-09-01') & date <= as_datetime('1999-01-31'))
+
+dat_tt_words.cln.samp %>%
+  distinct(Party, doc_num) %>%
+  count(Party)
+
+```
+
+Subsetting on this date range yields about 8,800 documents with roughly even samples for Republicans and Democrats. However, there are only 42 documents associated with Independents. For simplicity, we'll focus only on Democrats and Republicans. 
+
+
+```{r}
+dat_tt_words.cln.samp <- dat_tt_words.cln.samp %>%
+  filter(Party != 'Independent')
+
+```
+
+
+## Train/Text Split 
+
+Finally, for our exploratory analysis, we'll take a 50% training sample from our subset data.
+
+
+```{r}
+doc_ids <- unique(dat_tt_words.cln.samp$doc_num) # Get document IDs
+
+n_docs = .50 * length(doc_ids) # Calculate number of documents to sample
+
+set.seed(1231) # set seed for reproducibility
+
+doc_ids_test = sample(doc_ids, n_docs) # sample document IDs for test data
+
+dat_tt_words.cln.samp.train <- dat_tt_words.cln.samp %>%
+  filter(doc_num %!in% doc_ids_test) # Select documents for training
+
+dat_tt_words.cln.samp.test <- dat_tt_words.cln.samp %>%
+  filter(doc_num %in% doc_ids_test) # Select documents for test
+
+
+```
+
+
+## Data formating for STM models
+
+### Pre-processing for STM models
+
+To fit our STM models, we'll use the fantastic `stm` package. While `stm` has it's own functions for processing text data, we'll try to do most of our processing with tidytext, which allows us to maintain consistenty with other use cases. 
+
+First, we need to cast our tidy format text data into a so-called `sparse` document-term matrix. We'll also take some other pre-processing steps to simplify the modeling process. Specifically, we'll drop very common and very uncommon words. This can dramatically minimize the parameter space of the model (remember, it has distributions over *every* word for *each* topic) and mitigate challenges posed by sparsity.
+
+```{r}
+
+# Cast to sparse matrix, which is valid for textmineR
+train_dtm <- dat_tt_words.cln.samp.train %>%
+  cast_sparse(doc_num, word_lemma, value=n) 
+
+# User textminor function TermDocFreq to extract term and document frequencies
+
+tf <- TermDocFreq(dtm = train_dtm) %>%
+    mutate(doc_prop = doc_freq/n_docs) 
+
+
+# Exclude words that (1) occur in less than 1% of documents or (2) occur in more than 99% of documents .
+words_to_keep <- tf %>%
+  filter(doc_prop >= .01 & doc_prop <= .99)
+
+cat(paste('N words: ', nrow(tf), '\nN words after filtering: ', nrow(words_to_keep), sep=''))
+
+# Drop these words from our training data
+
+dat_tt_words.cln.samp.train <- dat_tt_words.cln.samp %>%
+  filter(word_lemma %in% words_to_keep$term)
+
+```
+
+By dropping uncommon and common words, we've decreased our vocabular by an order of magnitude. In practice, it's important to do sensitivity analyses over different thresholds; but for our purposes, we'll assume that this transformation doesn't dramatically change the meaning of our documents. 
+
+Now that we've filtered out infrequent/frequent words, we'll recast our DTM. We'll also create a design matrix containing our covariates.
+
+```{r}
+
+# Cast training data into sparse DTM 
+train_sparse <- dat_tt_words.cln.samp.train %>%
+  cast_sparse(doc_num, word_lemma, value=n)
+
+
+# Create a date range from the min/max dates in our training data
+date_grid <- tibble(date = seq(min(dat_tt_words.cln.samp.train$date), 
+                               max(dat_tt_words.cln.samp.train$date), by='days')) %>%
+  mutate(date_int = row_number()) # Associate each date with an integer
+
+
+# Create design matrix 
+train_X <- dat_tt_words.cln.samp.train %>%
+  distinct(doc_num, Party, date) %>%
+  left_join(date_grid) # Merge our dates with the date grid so that we can represent date as a sequenc of integers
+
+```
+
+# Working with STM models
+
+## Fitting STM models
+
+Now we're ready to fit our STM models! Because we don't know the true number of topics, K, we'll fit a model over a grid of K values ranging from 5 to 60 at intervals of 5. So, in total, we'll train 12 topic models. This takes quite a while to run, even on a powerful machine. To help minimize training time, I'm using the `furrr` package to train the models in parallel. However, even in parallel, this code takes a while to run. If you don't want to run it now, you can load the final object, `many_models`, from the `/models/` directory in our workshop directory. 
+
+To fit our STM models, we'll specify a value of `K`, the sparse matrix we want to train the model on, our model for topic prevalence, and the data.frame that contains our covariates. Here, we'll model topic prevelance as a function of Party, a binary factor, and time, which we'll model with a spline. In practice, you may want to try different functional forms, e.g. perhaps for time. In this data, we do not really have a continuous (or even approximately continuous) measure of time, so it might make more sense to treat day, or week, as a categorical variable. 
+
+```{r, eval=F}
+## This takes quite a while to run!
+## To save time, you can just load the `many_models` object, which is saved as `stm_models.RDS` in the /modeles directory.
+## 
+
+
+# Parallel model fitting adapted from https://juliasilge.com/blog/evaluating-stm/
+
+# Uncomment and run to set number of cores to be used for parallel processing
+# options(mc.cores = 6)
+
+# Setup env for multiprocessing
+plan(multisession, gc = TRUE)
+
+many_models <- data_frame(K = seq(5,60,5)) %>% # Initialize a column of values for K 
+  mutate(topic_model = future_map(K,   # map values of K into `stm` in parallel 
+                                  ~stm(train_sparse,  # Sparse matrix
+                                       K = .,         # placeholder for K
+                                       prevalence = ~ Party*s(date_int), # prevalence model
+                                       data = train_X, verbose=F)))
+
+#saveRDS(many_models, '../models/stm_models.RDS')
+
+```
+
+
+```{r}
+# Load the trained models
+many_models <- readRDS('../models/stm_models.RDS')
+```
+
+## Evaluating STM models
+
+Now that we've trained our models, we'll try to pick a specific model based on various measure of model fit/quality. In this case, we're trying to decide on the optimal number of Topics. 
+
+**Note:** In practice, unless there is a very clear winner, it's probably a good idea to conduct sensitivity analyses over models with different numbers of topics. 
+
+First, we'll extract a bunch of model fit metrics:
+
+```{r}
+
+# Adapted from https://juliasilge.com/blog/evaluating-stm/
+
+heldout <- make.heldout(train_sparse) # Here we're setting aside some heldout data that we'll use to evaluate our model. 
+                                      # However, really, this data should NOT be taken from our training data!
+
+
+k_result <- many_models %>%
+  mutate(exclusivity = map(topic_model, exclusivity),
+         semantic_coherence = map(topic_model, semanticCoherence, train_sparse),
+         eval_heldout = map(topic_model, eval.heldout, heldout$missing),
+         residual = map(topic_model, checkResiduals, train_sparse),
+         bound =  map_dbl(topic_model, function(x) max(x$convergence$bound)),
+         lfact = map_dbl(topic_model, function(x) lfactorial(x$settings$dim$K)),
+         lbound = bound + lfact,
+         iterations = map_dbl(topic_model, function(x) length(x$convergence$bound)))
+
+```
+
+Now, let's plot some of these metrics as a function of K:
+
+```{r}
+k_result %>%
+  transmute(K,
+            `Lower bound` = lbound,
+            Residuals = map_dbl(residual, "dispersion"),
+            `Semantic coherence` = map_dbl(semantic_coherence, mean),
+            `Held-out likelihood` = map_dbl(eval_heldout, "expected.heldout")) %>%
+  gather(Metric, Value, -K) %>%
+  ggplot(aes(K, Value, color = Metric)) +
+  geom_line(size = 1.5, alpha = 0.7, show.legend = FALSE) +
+  facet_wrap(~Metric, scales = "free_y") +
+  labs(x = "K (number of topics)",
+       y = NULL,
+       title = "Model diagnostics by number of topics",
+       subtitle = "These diagnostics indicate that a good number of topics would be around 50 or 60")
+```
+
+Ulimately, we want to pick a model that maximizes semantic coherence, roughly the likelihood that high probability words in a given topic co-occur in a high-probability document for that topic. However, at the same time, we want to minimize our residuals and maximize the held-out likelihood and the marginal probability of the data given the model, which is referred to, here, as the "lower bound". Unfortunately, semantic coherence and these other metrics usually move in opposite directions. 
+
+In this case, based on our residuals, held-out likelihood, and lower bound plots, 50 <= K >= 60 is a good range. It also looks like these models are tied (at the lowest) levels of semantic coherence. 
+
+
+### Coherence vs Exclusivity
+
+
+Another important diagnostic is *exclusivity*, which represents the degree to which the highest probability words in a topic are *exclusive* or *unique* to that topic. This is a valuable complement to coherence, because you could maximize coherence by assigning the words with the highest marginal empirical probabilities to all topics (e.g. all topics place the most density on "the", "and", and "is", for example). In this case, we could tell that this is a "bad" model by looking at the exclusivity scores for the model's topics, which would be very low because all topics share their high probability words. 
+
+
+```{r}
+
+K_means <- k_result %>%
+  select(K, exclusivity, semantic_coherence) %>%
+  filter(K %in% c(40, 45, 50, 55, 60)) %>%
+  unnest(cols = c(exclusivity, semantic_coherence)) %>%
+  mutate(K = as.factor(K)) %>%
+  group_by(K) %>%
+  summarize_all(.funs = c(mean, sd))
+
+
+
+k_result %>%
+  select(K, exclusivity, semantic_coherence) %>%
+  filter(K %in% c(40, 45, 50, 55, 60)) %>%
+  unnest(cols = c(exclusivity, semantic_coherence)) %>%
+  mutate(K = as.factor(K)) %>%
+  ggplot(aes(semantic_coherence, exclusivity, color = K)) +
+  geom_point(size = 2, alpha = 0.7) +
+  labs(x = "Semantic coherence",
+       y = "Exclusivity",
+       title = "Comparing exclusivity and semantic coherence",
+       subtitle = "Models with fewer topics have higher semantic coherence for more topics, but lower exclusivity") +
+  #facet_wrap(K~.) +
+  geom_hline(data=K_means, aes(yintercept=exclusivity_fn1, color=K)) + 
+  geom_vline(data=K_means, aes(xintercept=semantic_coherence_fn1, color=K)) 
+  
+
+```
+
+It looks like the model with 60 topics has the highest average exclusivity and the 3rd highest average coherence. However, this is a bit hard to see, so we can also look at the point estimates.
+
+
+```{r}
+K_means %>%
+  rename(mean_exclusivity = exclusivity_fn1,
+         mean_semantic_coherence = semantic_coherence_fn1,
+         sd_exclusivity = exclusivity_fn2,
+         sd_semantic_coherence = semantic_coherence_fn2) %>%
+  select(K, mean_exclusivity, sd_exclusivity, mean_semantic_coherence, sd_semantic_coherence) %>%
+  mutate_if(is.numeric, round, digits=2)
+```
+
+
+Interestingly, it looks like exclusivity is the same for K = 50, 55, and 60, though the SD is a little lower for K = 55 and 60. In contrast, the model with K = 60 actually has the 4th lowest semantic coherence. 
+
+### Choosing a model
+
+Ultimately, our model residuals and marginal fit statistics indicate that the model with 60 topics is the best. However, comparisons semantic coherence and exclusivity suggest that other models *could* be just as good, depending on how you define model success. 
+
+When it's hard to identify a clear winner, you should almost always conduct sensitivity analyses across multiple models! If they all lead you to the same conclusion, then perhaps that conclusion warrants greater trust. However, if they all lead you to different conclusions, then you probably shouldn't trust any of them!
+
+However, for our purposes, we'll choose the model with K=60 and proceed with our analyses. 
+
+
+```{r}
+stm_model.1.train <- k_result %>% 
+  filter(K == 60) %>% 
+  pull(topic_model) %>% 
+  .[[1]]
+
+stm_model.1.train
+```
+
+# Exploring STM models
+
+Now that we've selected a topic model, we can begin to answer some of our questions. 
+
+
+## What `topics` are relevant to our corpus?
+
+To take a high-level glance at the topics estimated by our model, we can use the `stm` `plot` function with `type='summary`. This plot orders topics by the marginal proportion (e.g. likelihood of occurance) and shows the top words associated with each topic. 
+
+```{r, fig.height=15}
+plot(stm_model.1.train, type = "summary", xlim = c(0, .3), text.cex=1.5)
+
+```
+
+By default, the *top* words are defined as the words with the highest probability. However, we can also change this so that the *top* words are the words with the highest exclusivity score.
+
+
+```{r, fig.height=15}
+
+plot(stm_model.1.train, type = "summary", xlim = c(0, .3), text.cex=1.5, n=5, labeltype='frex')
+
+```
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> Based on these plots, which topic(s) are most relevant to impeachment?
+</div>
+
+
+
+## Inter-topic correlations 
+
+In contrast to *vanilla* LDA models, STM models estimate a covariance matrix for the distribution of topics. We can use this covariance matrix to visualize associations among topics. 
+
+```{r, fig.height=8, fig.width=8}
+library(igraph)
+cormat <- topicCorr(stm_model.1.train)
+set.seed(123)
+plot(cormat, niter=5000, repulserad=60^4*10, 
+     edge.arrow.size=0.5, 
+     vertex.label.cex=0.75, 
+     vertex.label.family="Helvetica",
+     vertex.label.font=2,
+     vertex.shape="circle", 
+     vertex.size=2, 
+     vertex.label.color="black", 
+     edge.width=0.5)
+```
+
+This is hard to read, so let's try a different kind of plot: 
+
+```{r}
+
+library(reshape2)
+
+melted_cormat <- melt(cormat$cor)
+
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+geom_tile()
+
+```
+
+This is still hard to read! Because I'm primarily interested in associations with Topic 25, I'll just plot the correlations with that topic.
+
+```{r}
+library(plotly) 
+
+p <- melted_cormat %>%
+  filter(Var1 == 25 & Var2 != 25) %>%
+  ggplot(aes(x = Var2, y = value)) + geom_text(aes(label=Var2)) + 
+  ylab('Correlation') +
+  xlab('Topic') +
+  ggtitle('Correlations of Topic 25 with other topics')
+  
+ggplotly(p)
+```
+
+It looks like topic 25 is most strongly related to 35, 57, 53, so let's take a closer look at those topics. 
+
+## Evaluating `topic` content
+
+Out of 60 topics, the one's that seem most relevant to our questions about impeachment are 25, 35, 57, and 53. But, what do these topics *mean*? To get a better idea of their subjective meaning, we can look again at their top words. 
+
+
+```{r, fig.width=8, fig.height=4}
+
+plot(stm_model.1.train, type = "summary", xlim = c(0, .3), n=5, labeltype='prob', 
+     topics = c(25, 35, 57, 53))
+
+```
+
+
+```{r, fig.width=8, fig.height=4}
+
+plot(stm_model.1.train, type = "summary", xlim = c(0, .3), n=5, labeltype='frex', 
+     topics = c(25, 35, 57, 53))
+
+```
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> Based on these plots, what do these topics mean?
+</div>
+
+
+### Examining relevant documents 
+
+Lookin at the top words associated with a topic is a good way to get an idea of what the topic represents. However, there is another crucial source of information: the *documents* most strongly associated with the topic. When trying to summarize topics, you should *always* look at the top words *and* the top documents.
+
+We can do this using the `findThoughts` function, which prints the text of the documents most strongly associated with a particular topic. However, to do this, we first need to make our texts accessible. For simplicity, I'll just examine the first 500 characters in each relevant document.
+
+
+
+```{r}
+
+texts = dat_tt_words %>% # This tidy data.frame contains the original words (i.e. before we lemmatized)
+  filter(doc_num %in% unique(dat_tt_words.cln.samp.train$doc_num)) %>% # Keep only the docs in our training data
+  group_by(doc_num) %>% 
+  summarize(text = str_sub(paste0(word, collapse=' '), 1,500)) %>% # Collapse the rows of words into a single cell
+  ungroup()
+
+findThoughts(stm_model.1.train, texts = texts$text, topics = c(25), n=3)
+
+```
+
+
+
+```{r}
+
+findThoughts(stm_model.1.train, texts = texts$text, topics = c(35), n=3)
+
+```
+
+
+```{r}
+findThoughts(stm_model.1.train, texts = texts$text, topics = c(57), n=3)
+
+```
+
+
+
+```{r}
+findThoughts(stm_model.1.train, texts = texts$text, topics = c(53), n=3)
+
+```
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> Based on these excerpts, as well as the topics' top words, how would you label the topics?
+</div>
+
+* Topic 25:
+* Topic 35: 
+* Topic 57: 
+* Topic 53:
+
+
+## Hypothesis testing with STMs
+
+Clearly, Topic 25 is the most strongly related to impeachment. So, let's use the topic prevalence component of our model to estimate the distribution of Topic 25 over time and by party. 
+
+To do this, we'll use `stm`'s `estimateEffect` function. Then, we'll use `tidystm`'s function `extract.estimateEffect` to extract a tidy dataframe of the estimated effects.
+
+```{r}
+library(tidystm)
+
+prep = estimateEffect(c(25) ~ Party*s(date_int), stm_model.1.train, meta=train_X)
+
+  
+effs <- purrr::map(c('Democratic', 'Republican'), # Levels of moderator
+                   ~extract.estimateEffect(prep, # effects estimate object
+                                           "date_int", # The IV we want to look at
+                                           model = stm_model.1.train, # Our STM model
+                                           moderator='Party', # Moderator 
+                                           moderator.value = .)) %>% # Moderator levels, which we specify via `map`
+  do.call('rbind', .) # Here, we rbind the mapped lists, which yields a single DF
+
+head(effs)
+
+```
+
+Importantly, the `estimateEffect` function uses *documents* as units and the topic proportion as the outcome. Thus, our effects estimates reflect expected changes in the topic proportion for a given document, conditional on our covariates. 
+
+To get a better idea of what these effects imply, let's visualize them.
+
+
+```{r}
+
+label_dat <- data.frame(date = as.numeric(as_datetime('1998-10-08')), label='test', estimate=.2)
+                        
+effs %>%
+  left_join(date_grid, by = c('covariate.value'='date_int')) %>%
+  ggplot(aes(x = date, y = estimate)) + 
+  geom_ribbon(aes(ymin=ci.lower, ymax=ci.upper, fill=moderator.value), alpha=.25) + 
+  geom_line(aes(color=moderator.value)) +
+  theme_apa() + 
+  ylab('Topic Proportion') +
+  xlab('Date') +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2) + 
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2) +
+  geom_label(aes(x = as_datetime('1998-10-08'), y=.32, label = "Impeachment Initiated")) +
+  geom_label(aes(x = as_datetime('1998-12-19'), y=.32, label = "Impeachment Vote")) + 
+  ggtitle('Estimated topic proportions by date and party') + 
+  facet_wrap(topic~., ncol=1)
+
+```
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What does this figure suggest?
+</div>
+
+
+Now, let's look specifically at the effects for the two days relevant to impeachment, the day the impeachment was initiated and the day it was voted on. 
+
+```{r}
+
+prep_marg = estimateEffect(c(25) ~ Party*s(date_int), stm_model.1.train, meta=train_X)
+
+
+date_ints <- date_grid %>%
+  filter(date == as_datetime('1998-10-08') | date == as_datetime('1998-12-19')) %>%
+  pull(date_int)
+  
+party_effs <- purrr::map(date_ints, # Levels of moderator
+                   ~extract.estimateEffect(prep, # effects estimate object
+                                           "Party", # The IV we want to look at
+                                           model = stm_model.1.train, # Our STM model
+                                           moderator='date_int', # Moderator 
+                                           moderator.value = .)) %>% # Moderator levels, which we specify via `map`
+  do.call('rbind', .) # Here, we rbind the mapped lists, which yields a single DF
+
+
+
+party_effs %>%
+  left_join(date_grid, by = c('moderator.value'='date_int')) %>%
+  ggplot(aes(y = estimate, x = as.factor(date), color=covariate.value)) + 
+  geom_point(size=2, position=position_dodge(width=.25)) +
+  geom_errorbar(aes(ymin=ci.lower, ymax=ci.upper), width=.1, position=position_dodge(width=.25)) +
+  theme_apa() +
+  ylab('Topic proportion') +
+  xlab('Party') +
+  ggtitle('Effect of Party on Topic 25 by date')
+
+
+```
+
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What does this figure suggest?
+</div>
+
+
+## Investigating Topic Content
+
+It seems clear that Democrats' floor speeches were more relevant to Topic 25 than Republicans. 
+
+However, what if they speak about these topics in different ways? To investigate this hypothesis, we can estimate a new model that models topic content as a function of Party.   
+
+
+```{r, eval=F}
+
+stm_model.2.train <- stm(train_sparse,
+            K = 60,
+            prevalence = ~ Party*s(date_int), # prevalence model
+            content = ~ Party,
+            data = train_X,
+            verbose=F)
+
+saveRDS(stm_model.2.train, '../models/stm_model_2_train.RDS')
+
+```
+
+```{r}
+stm_model.2.train <- readRDS('../models/stm_model_2_train.RDS')
+```
+
+Now, we'll visualize between-party differences in topic *content* using the `stm` plot function with `type='perspectives'`.
+
+
+```{r, fig.height=8, fig.width=10}
+plot(stm_model.2.train, type = "perspectives", topics = 25, n = 100)
+```
+
+In this figure, a word's size indicates its association with the topic. Further, it's position on the X-axis indicates it's differential association with the specified levels of the covariate. 
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What does this figure suggest?
+</div>
+
+
+# Validation with STM models 
+
+At this point, we've fit a bunch of STM models and picked one for further exploration. Based on what we observed, it seems that  Democrats spoke more about impeachment on the day of the vote, but also that their discussions of impeachment focused more on "process", whereas Republicans' discussions of impeachment focused more explicitly on the president and words like "justice", "truth", and "lie". 
+
+Given our understanding of the data, this makes sense! However, are these findings robust? To address this question, we will fit a new model on our held-out confirmation data. Ideally, we'd like to see the same topic structure and come to the same conclusions. However, if our conclusions deviate from our current expectations, we may need to accept the possibility that our conclusions are not reliable. 
+
+
+
+```{r}
+
+# Cast training data into sparse DTM 
+test_sparse <- dat_tt_words.cln.samp.test %>%
+  cast_sparse(doc_num, word_lemma, value=n)
+
+
+# Create a date range from the min/max dates in our training data
+date_grid <- tibble(date = seq(min(dat_tt_words.cln.samp.test$date), 
+                               max(dat_tt_words.cln.samp.test$date), by='days')) %>%
+  mutate(date_int = row_number()) # Associate each date with an integer
+
+
+# Create design matrix 
+test_X <- dat_tt_words.cln.samp.test %>%
+  distinct(doc_num, Party, date) %>%
+  left_join(date_grid) # Merge our dates with the date grid so that we can represent date as a sequenc of integers
+
+```
+
+
+```{r}
+
+stm_model.2.test <- stm(test_sparse,
+            K = 60,
+            prevalence = ~ Party*s(date_int), # prevalence model
+            content = ~ Party,
+            data = test_X,
+            verbose=F)
+
+saveRDS(stm_model.2.test, '../models/stm_model_test.RDS')
+
+```
+
+
+First, let's look at the top words for each topic. 
+
+
+```{r, fig.height=15}
+
+plot(stm_model.2.test, type = "summary", xlim = c(0, .3), text.cex=1.5, n=5)
+
+```
+
+Uh oh, our nice "impeach" topic didn't show up! 
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> Are there any topics related to our questions of interest?
+</div>
+
+
+## Extracting the `beta` matrix 
+
+One way to look for relevant topics is to identify topics that place the highest probability on relevant keywords, such as "impeachment". To do this, we'll extract the `beta` matrix from our model and identify the topics that place the highest probability on "impeachment"
+
+```{r}
+td_beta <- tidy(stm_model.2.test, matrix='beta') %>% # We can extract a tidy dataframe containing the beta matrix from our model
+  drop_na(topic) # For some reason, there are some NA rows for topics/terms. Should look into this!
+
+td_beta %>%
+  filter(term == 'impeachment') %>% # Pick a relevant word
+  arrange(desc(beta)) %>% # Arrange by highest probability
+  mutate(beta = round(beta, digits=2)) %>%
+  head()
+  
+```
+
+Interesting, it looks like topic 50 has, by far, the greatest probability density over 'impeachment'. Let's look at this topic, along with 15, 46, and 35
+
+
+```{r, fig.height=5}
+
+plot(stm_model.2.test, type = "summary", xlim = c(0, .3), n=5, topics=c(50,15,46,35))
+
+```
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> Are these topics related to impeachment? If so, in what way?
+</div>
+
+
+Okay, if you squint, Topic 50 could definitely be related to impeachment. Also, "Paula" in topic 46 is probably related to Paula Jones, the person who filed a sexual harassment lawsuit filed against Clinton. 
+
+## Examining relevant documents 
+
+Let's dig a bit deeper by looking at the relevant documents for each topic:
+
+```{r}
+
+texts = dat_tt_words %>% # This tidy data.frame contains the original words (i.e. before we lemmatized)
+  filter(doc_num %in% unique(dat_tt_words.cln.samp.test$doc_num)) %>% # Keep only the docs in our training data
+  group_by(doc_num) %>% 
+  summarize(text = str_sub(paste0(word, collapse=' '), 1,500)) %>% # Collapse the rows of words into a single cell
+  ungroup()
+
+findThoughts(stm_model.2.test, texts = texts$text, topics = c(50), n=3)
+
+```
+
+This topic certainly seems relevant to impeachment; these (very few!) documents also suggest that maybe this topic is associated with *not* supporting impeachment.
+
+
+```{r}
+
+findThoughts(stm_model.2.test, texts = texts$text, topics = c(35), n=3)
+
+```
+
+This topic also seems to be about impeachment; however, it seems that the top documents express positions *for* impeachment. 
+
+
+```{r}
+findThoughts(stm_model.2.test, texts = texts$text, topics = c(46), n=3)
+
+```
+
+This also appears to be about impeachment, though with greater focus on lying and proceedings.
+
+
+
+```{r}
+findThoughts(stm_model.2.test, texts = texts$text, topics = c(15), n=3)
+
+```
+
+This appears to be less relevant to impeachment (as we have been thinking about it) and more relevant to proceedings. 
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What do these topics seem to be about?
+</div>
+
+* 35: 
+* 46:
+* 35: 
+* 15: 
+
+## Hypothesis testing on validation set
+
+While these topics are different from what we observed in our training data, they still seem relevant. Let's go ahead and visualize the effects of our covariates: 
+
+```{r}
+library(tidystm)
+
+prep.test = estimateEffect(c(50, 46, 35) ~ Party*s(date_int), stm_model.2.test, meta=test_X)
+
+  
+effs.test <- purrr::map(c('Democratic', 'Republican'), # Levels of moderator
+                   ~extract.estimateEffect(prep.test, # effects estimate object
+                                           "date_int", # The IV we want to look at
+                                           model = stm_model.2.test, # Our STM model
+                                           moderator='Party', # Moderator 
+                                           moderator.value = .)) %>% # Moderator levels, which we specify via `map`
+  do.call('rbind', .) # Here, we rbind the mapped lists, which yields a single DF
+
+```
+
+
+```{r, fig.height=6}
+
+label_dat <- data.frame(date = as.numeric(as_datetime('1998-10-08')), label='test', estimate=.2)
+                        
+effs.test %>%
+  left_join(date_grid, by = c('covariate.value'='date_int')) %>%
+  mutate(topic = recode(topic, `50` = 'Oppose impeachment', `46` = 'Lying', `35` = 'Support impeachment' )) %>%
+  ggplot(aes(x = date, y = estimate)) + 
+  geom_ribbon(aes(ymin=ci.lower, ymax=ci.upper, fill=moderator.value), alpha=.25) + 
+  geom_line(aes(color=moderator.value)) +
+  theme_apa() + 
+  ylab('Topic Proportion') +
+  xlab('Date') +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2) + 
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2) +
+  geom_label(aes(x = as_datetime('1998-10-08'), y=.32, label = "Impeachment Initiated")) +
+  geom_label(aes(x = as_datetime('1998-12-19'), y=.32, label = "Impeachment Vote")) + 
+  ggtitle('Estimated topic proportions by date and party') + 
+  facet_wrap(topic~., ncol=1)
+
+```
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What does this figure suggest?
+</div>
+
+
+## Investigating Topic Content on validation set
+
+Finally, we can take a look at party differences in topic content. First, let's look at Topic 50, the topic we're thinking of as associated with opposition to impeachment. 
+
+```{r, fig.height=8, fig.width=10}
+plot(stm_model.2.test, type = "perspectives", topics = 50, n = 100)
+```
+
+This looks somewhat similar to the perspectives plot of Topic 25 in our training data. However, there are some key differences, too.
+
+
+Now let's look at Topic 35, the topic we're thinking of as associated with supporting impeachment:
+
+```{r, fig.height=8, fig.width=10}
+plot(stm_model.2.test, type = "perspectives", topics = 35, n = 100)
+```
+
+Interesting, it looks like, at least sometimes, Democrats might be talking about other issues (e.g. not Clinton's impeachment) in the context of this topic. 
+
+
+Finally, let's look at Topic 46, the topic that seems to be a little more generally about "lying".
+
+```{r, fig.height=8, fig.width=10}
+plot(stm_model.2.test, type = "perspectives", topics = 46, n = 100)
+```
+
+Here, we can see that Republican's are more likely to mention Lewinsky and Jones, key people in the case *against* Clinton. Their use of this topic also places more density on words like "lie" and "perjury".
+
+
+# Conclusions 
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> Based on these analyses, what conclusions would you draw?
+</div>
+

@@ -1,0 +1,37 @@
+---
+title: "Theory Driven Text Analysis Workshop"
+subtitle: "Dictionary Methods --- Word counts \n\nSPSP 2020"
+author: 
+  name: "Joe Hoover & Brendan Kennedy"
+  email: "joseph.hoover@kellogg.northwestern.edu\n\nbtkenned@usc.edu"
+output:
+  html_notebook:
+    toc: yes
+---
+
+
+# Overview
+
+```{r, echo=F, message=F, warning=F}
+# Define chunk options
+knitr::opts_chunk$set(echo=T, message=F, warning=F)
+```
+
+```{r, message=F,  echo=T}
+# Load packages 
+library(pacman)
+p_load(readr, dplyr, tidyr, ggplot2, jtools, 
+       knitr, reshape2, jsonlite, lubridate)
+
+```
+
+# Data Preparation 
+
+```{r}
+
+dat_tidy <- readRDS('../data/tdta_clean_house_data.RDS')
+
+```
+
+
+# 
