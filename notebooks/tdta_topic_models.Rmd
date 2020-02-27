@@ -51,7 +51,7 @@ Accordingly, we'll use an STM model to ask questions like:
 First, we'll load the tidy-format version of our data.
 ```{r}
 
-dat_tt_words <- read.fst('../data/tdta_clean_house_data_tidy.fst')
+dat_tt_words <- readRDS('../data/tdta_clean_house_data_tidy.RDS')
 
 ```
 
@@ -876,5 +876,3 @@ Here, we can see that Republican's are more likely to mention Lewinsky and Jones
   <strong>Question:</strong> Based on these analyses, what conclusions would you draw?
 </div>
 
-
-git reset --hard HEAD^
