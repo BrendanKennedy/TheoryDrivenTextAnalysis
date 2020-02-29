@@ -1,3 +1,4 @@
+pacman
 readr
 dplyr
 tidyr
@@ -6,3 +7,18 @@ pmr
 jtools
 knitr
 reshape2
+jtools
+jsonlite
+lubridate
+tidytext
+lme4
+textstem
+quanteda
+textmineR
+stm
+furrr
+purrr
+sjPlot
+sjstats
+broom
+text2vec

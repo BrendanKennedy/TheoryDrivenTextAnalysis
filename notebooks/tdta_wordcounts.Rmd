@@ -30,7 +30,7 @@ knitr::opts_chunk$set(echo=T, message=F, warning=F)
 # Load packages 
 library(pacman)
 p_load(readr, dplyr, tidyr, ggplot2, jtools, 
-       knitr, reshape2, jsonlite, lubridate)
+       knitr, reshape2, jsonlite, lubridate, sentimentr, magrittr)
 
 ```
 
@@ -54,7 +54,7 @@ In this data.frame, words are stored in the cells of the column `word`. Accordin
 
 If you have enough data, there's really _never_ any reason to not separate your data into a training set and testing set. Of course, determing how much data is *enough* can be tricky, because you don't want to create a situation where you are underpowered or unable to estimate a target parameter with sufficient precision. 
 
-However, treating documents as our units of observation, we have an $N = $ 35,959, which is certainly large enough for splitting.
+However, treating documents as our units of observation, we have an $N = $ 35,959, which is probably large enough for splitting.
 
 ```{r}
 
@@ -128,30 +128,10 @@ Glancing at these words, it's clear that words are repeated in some categories.
   <strong>Question:</strong> What other characteristics stand out, if any?
 </div>
 
-### A cautionary note on word count validity
-
-One of the greatest strengths of dictionary-based text measurement methods is that they allow you to precisely define the construct you are interested in. This works extremely well when you are interested in specific words or types of words. 
-
-For example, if you are interested in *function words*, then it would never make sense to use anything other than a dictionary-based approach. Similarly, if you are truly interested in the usage of specific *positive* or *negative* words, then, again, it probably wouldn't make sense to use anything other than a dictionary approach. 
-
-In these examples, there is a 1:1 relationship between the target construct and the operationalization. However, this 1:1 relationship is difficult to maintain for more abstract constructs, like "positive sentiment" or "negative sentiment". In such cases, you (or someone else) has to decide which words evoke "positive sentiment" or "negative sentiment". 
-
-Further, we are often interested in expressions of meaning that may operate above the word level. For instance, consider the following example: 
-
-`Let's just say...I didn't love it'
-
-Most dictionary-based word count methods would estimate the sentiment expressed in this sentence as "positive" because of the token `love`. However, considering the entire *context* of this example, we can infer that the most likely sentiment is probably "negative". 
-
-In sum, dictionary-based word count approaches can be quite powerful; however, they have two notable shortcomings: 
-
-1. Dependence on dictionary validity
-2. Cannot account for context
-
-This *does not* mean that you shouldn't use dictionary-based word count methods. However, it *does* mean that you should keep these short comings in mind. And, even better, you should try to account for them through validation. 
 
 ### `tidytext` word count sentiment analysis
 
-In principle, `tidytext` makes dictionary-based word count sentiment analysis quite simple. 
+In principle, `tidytext` makes simple dictionary-based word count sentiment analysis quite simple. 
 
 To count the words we can just: 
 
@@ -217,7 +197,6 @@ dat_tidy.train.sent %>%
   ylab('Proportion')
 
 ```
-
 
 
 What if we look at the document *N*s of sentiment words instead of proportions?
@@ -346,6 +325,7 @@ dat_tidy.train.sent %>%
   <strong>Question:</strong> What can we learn from this figure?
 </div>
 
+
 ## Hypothesis testing with word counts
 
 ```{r}
@@ -392,6 +372,8 @@ dat_tidy.train.speaker <- dat_tidy.train.speaker %>%
   
 ```
 
+
+### Negative sentiment
 
 ```{r}
 
@@ -444,7 +426,7 @@ train.speaker.negative.m1.pred %>%
 
 
 
-## Disgust 
+### Disgust 
 
 ```{r}
 
@@ -480,6 +462,7 @@ train.speaker.disgust.m1.pred %>%
 ```
 
 
+### All sentiment
 
 ```{r}
 
@@ -603,6 +586,8 @@ dat_tidy.test.speaker <- dat_tidy.test.speaker %>%
 ```
 
 
+### Negative
+
 ```{r}
 
 test.speaker.negative.m1 <- dat_tidy.test.speaker %>%
@@ -654,7 +639,7 @@ test.speaker.negative.m1.pred %>%
 
 
 
-## Disgust 
+### Disgust 
 
 ```{r}
 
@@ -690,6 +675,7 @@ test.speaker.disgust.m1.pred %>%
 ```
 
 
+### All sentiment 
 
 ```{r}
 
@@ -743,6 +729,7 @@ test.speaker.all.m1.pred %>%
 
 
 ```{r, fig.width=10, fig.height=6}
+
 test.speaker.all.m1.pred %>%
   left_join(date_grid) %>%
   ggplot(aes(x = date, y = preds, color=Party)) + 
@@ -768,10 +755,255 @@ sjPlot::plot_model(test.speaker.all.m1, type='re')[3]
 
 
 
-### Validating dictionaries 
+### Validation, validation, validation!
+
+No matter what you're trying to measure or what measurement methods you're using, you should _always_ closely examine what you are _actually_ measuring. 
+
+Coincidentally, there's a very relevant quote from Bill Clinton:
+
+From the (Wikipedia entry)[https://en.wikipedia.org/wiki/Impeachment_of_Bill_Clinton] for Clinton's impeachment
+
+A much-quoted statement from Clinton's grand jury testimony showed him questioning the precise use of the word "is". Contending his statement that "there's nothing going on between us" had been truthful because he had no ongoing relationship with Lewinsky at the time he was questioned, Clinton said: "It depends upon what the meaning of the word 'is' is..."
+
+So what are we measuring when we count words? What are we measuring with NRC lexicon? 
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> So what are we measuring when we count words? What are we measuring with NRC lexicon? Are we really measuring what we think we are?
+</div>
+
+
+Let's take a look! 
+
+```{r}
+
+text_dat <- readRDS('../data/tdta_clean_house_data.RDS')
+
+top_docs <- dat_tidy.train %>%
+  group_by(doc_num) %>%
+  mutate(doc_total_words = n()) %>%
+  ungroup() %>%
+  inner_join(nrc_sent) %>%
+  count(doc_num, doc_total_words, sentiment) %>%
+  mutate(sent_prop = n/doc_total_words) %>%
+  group_by(sentiment) %>%
+  top_n(3, wt=n) %>%
+  left_join(text_dat %>% select(doc_num, text))
+
+
+
+top_docs %>%
+  filter(sentiment=='negative') %>%
+  arrange(desc(sent_prop)) %>%
+  mutate(text_seg = str_sub(text, 1,2000)) %>%
+  select(-text) %>%
+  View()
+ 
+
+```
+
+
+Because the documents are so long, it's actually quite hard to evaluate the veracity of our measurement. Another option is to look at the most frequent sentiment words in our corpus.
+
+```{r}
+
+top_words <- dat_tidy.train.sent %>%
+  count(sentiment, word) %>%
+  group_by(sentiment) %>%
+  top_n(10, wt=n) %>%
+  mutate(temp_id = row_number()) %>%
+  ungroup() %>%
+  select(-n) %>%
+  pivot_wider(names_from=sentiment, values_from=word) %>%
+  select(-temp_id)
+
+top_words
+ 
+
+```
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What can we learn from looking at these words? How do you feel about our analyses?
+</div>
+
 
 One of the greatest strengths of dictionary-based text measurement methods is that they allow you to precisely define the construct you are interested in. This works extremely well when you are interested in specific words or types of words. 
 
 For example, if you are interested in *function words*, then it would never make sense to use anything other than a dictionary-based approach. Similarly, if you are truly interested in the usage of *positive* or *negative* words, then, again, it probably wouldn't make sense to use anything other than a dictionary approach. 
 
-However, 
+In these examples, there is a 1:1 relationship between the target construct and the operationalization. However, this 1:1 relationship is difficult to maintain for more abstract constructs, like "positive sentiment" or "negative sentiment". In such cases, you (or someone else) has to decide which words evoke "positive sentiment" or "negative sentiment". 
+
+Further, we are often interested in expressions of meaning that may operate above the word level. For instance, consider the following example: 
+
+`Let's just say...I didn't love it'
+
+Most dictionary-based word count methods would estimate the sentiment expressed in this sentence as "positive" because of the token `love`. However, considering the entire *context* of this example, we can infer that the most likely sentiment is probably "negative". Another issue related to context sensitivity is domain dependence: a word might have negative connotations in some discourse communities, but not in others.
+
+In sum, dictionary-based word count approaches can be quite powerful; however, they have two notable shortcomings: 
+
+1. Dependence on dictionary validity
+2. Cannot account for context
+
+This *does not* mean that you shouldn't use dictionary-based word count methods. However, it *does* mean that you should keep these short comings in mind. And, even better, you should try to account for them. 
+
+# Doing better than simple word counts 
+
+In response to some of the issues raised above, people have started trying to improve on word count methods, for instance by accounting for negation or assigning weights to sentiment words. In `R`, you can use the `sentimentr` to do these things. 
+
+We're not going to go into detail, but `sentimentr` operates on the sentence level, it provides the option of assigning continuous weights to words, and attempts to account for negation by looking for patterns in user-specified windows around sentiment words. It's built lexicon is a combination of multiple lexicons (so it might have many of the same issues we observed in the NRC), but at least it tries to handle negation out of the box. 
+
+```{r, eval=F}
+
+text_dat.sentr <- text_dat %>%
+  filter(doc_num %!in% doc_ids_test) %>% # Select documents for training
+  mutate(text = gsub('[Mm]r\\.|[Hh]\\.[Rr]\\.|[Nn][Uu][Mm]\\.', 'mr', text)) %>%
+  mutate(sentences = get_sentences(text)) %$%
+  sentiment_by(sentences, by= list(doc_num))
+
+saveRDS(text_dat.sentr, file ='../data/text_dat_train_sentimentr_scores.RDS')
+
+```
+
+
+
+```{r}
+# For some reason looking at text_dat.sentr crashes my notebook, so
+# let's look at it in the console
+```
+
+Let's look at sentiment estimated with sentimentr at the day level.
+
+```{r, fig.width=8}
+dat_tidy.train %>%
+  filter(Party != 'Independent') %>%
+  distinct(doc_num, .keep_all = T) %>%
+  left_join(text_dat.sentr) %>%
+  group_by(Party, date) %>%
+  summarize(mean_sent = mean(ave_sentiment)) %>%
+  ggplot(aes(x = date, y = mean_sent, color=Party)) +
+  geom_line() + 
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  geom_point() +
+  theme_apa() +
+  ggtitle('N of documents across time by party') +
+  ylab('N') + 
+  xlab('Date') +
+  facet_wrap(Party~., ncol=1) +
+  geom_hline(yintercept=0)
+  
+```
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> What does this figure suggest?
+</div>
+
+Let's run one of our models with this data and see what it tells us...
+
+```{r}
+
+text_dat.sentr.train <- dat_tidy.train %>%
+  filter(Party != 'Independent') %>%
+  distinct(doc_num, .keep_all = T) %>%
+  left_join(text_dat.sentr) %>%
+  group_by(Party, speaker, date) %>%
+  summarize(mean_sent = mean(ave_sentiment)) %>%
+  left_join(date_grid) %>%
+  mutate(date_int_scaled = date_int/100, 
+         impeachment_1 = ifelse(date == as_datetime('1998-10-08'), 1, 0),
+         impeachment_2 = ifelse(date == as_datetime('1998-12-19'), 1, 0))
+  
+
+```
+
+
+
+```{r}
+
+
+text_dat.sentr.train.m1 <- lmer(mean_sent ~ 1 + Party*impeachment_1 + Party*impeachment_2  + (1  | speaker) + (1 + Party | date_int), data=text_dat.sentr.train)
+
+summary(text_dat.sentr.train.m1)
+```
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> How does this compare to our previous results?
+</div>
+
+```{r}
+
+
+
+text_dat.sentr.train.m1.pred <- dat_tidy.train.speaker.pred_grid %>%
+  mutate(preds = predict(text_dat.sentr.train.m1, newdata=dat_tidy.train.speaker.pred_grid, allow.new.levels=T))
+  
+
+
+text_dat.sentr.train.m1.pred %>%
+  left_join(date_grid) %>%
+  ggplot(aes(x = date, y = preds, color=Party)) + 
+  geom_line() + 
+  geom_point(aes(y = preds), alpha=.25) +
+  theme_apa() + 
+  scale_colour_manual(values = c("blue", "red")) + 
+  theme_apa() +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-10-08')), linetype=2, alpha=.25) +
+  geom_vline(xintercept=as.numeric(as_datetime('1998-12-19')), linetype=2, alpha=.25) +
+  ggtitle('Daily expected proportion of negative language for an average speaker' ) +
+  ylab('Speaker proportion negative language') + 
+  xlab('Date')
+
+  
+```
+
+
+
+<div class="alert alert-success" role="alert">
+  <strong>Question:</strong> How does this compare to our previous results?
+</div>
+
+
+# Loading LIWC dictionaries in R
+
+It's also possible to work with non-tidy dictionaries in R. For instance, we can use the package `quanteda` to load a LIWC format dictionary and get word counts. While there are a few ways to do this, we'll load the dictionary into a `quanteda` object and then convert our training corpus into a `quanteda` `corpus` object, which is just a native `quanteda` format. We'll then use `quanteda` to create a so-called document feature matrix or `dfm`, using our corpus and LIWC format dictionary.
+
+
+```{r}
+
+# Load the LIWC-format dictionary
+mfd2 <- dictionary(file='../dictionaries/MFD2.liwc',format='LIWC')
+
+# Filter our training data and convert to a data.frame
+text_dat.df <- text_dat %>%
+    filter(doc_num %!in% doc_ids_test) %>% # Select documents for training
+  as.data.frame()
+
+# Create a corpus object
+text_dat.corp <- corpus(text_dat.df, docid_field = 'doc_num', text_field = 'text')
+
+#
+mfd_counts <- dfm(text_dat.corp, dictionary = mfd2)
+```
+
+```{r}
+
+# Convert the dfm to a data.frame
+mfd_counts.mat <- matrix(as.numeric(mfd_counts[,1:10]), ncol=10) %>%
+  as.data.frame() 
+
+# provide column names 
+names(mfd_counts.mat) <- names(mfd2)
+
+
+text_dat.df <- text_dat.df %>%
+  cbind(mfd_counts.mat)
+
+head(text_dat.df %>% dplyr::select(doc_num, contains('.')))
+
+```
+

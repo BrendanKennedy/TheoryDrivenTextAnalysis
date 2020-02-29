@@ -20,7 +20,7 @@ knitr::opts_chunk$set(echo=T, message=F, warning=F)
 library(pacman)
 p_load(readr, dplyr, tidyr, ggplot2, pmr, jtools, knitr, reshape2, jsonlite, 
        lubridate, stringr, tidytext, fst, textstem, tm, quanteda, topicmodels, textmineR,
-       LDAvis, stm, furrr)
+       stm, furrr)
 
 # If error on install topic models, this post might help:
 # https://stackoverflow.com/questions/25759007/error-installing-topicmodels-package-non-zero-exit-status-ubuntu
@@ -534,8 +534,7 @@ To get a better idea of what these effects imply, let's visualize them.
 
 ```{r}
 
-label_dat <- data.frame(date = as.numeric(as_datetime('1998-10-08')), label='test', estimate=.2)
-                        
+
 effs %>%
   left_join(date_grid, by = c('covariate.value'='date_int')) %>%
   ggplot(aes(x = date, y = estimate)) + 
