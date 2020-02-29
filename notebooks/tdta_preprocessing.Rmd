@@ -305,6 +305,7 @@ dhp <- dhp %>%
   select(-segment, -url, -raw_date, -session) 
 dhp %>%
   saveRDS('../data/tdta_clean_house_data.RDS')
+
 ```
 
 Now, let's create a new dataframe with tidy text data using words as units. We'll also save this object for later use.

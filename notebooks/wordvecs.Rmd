@@ -47,7 +47,7 @@ library(gridExtra)
 GLOVE <- "~/Data/glove.6B.100d.txt"
 
 meta <- readRDS("./data/tdta_clean_house_data.RDS")
-meta <- meta[1:5000,]
+#meta <- meta[1:5000,]
 tdta <- meta %>% 
     select(doc_num, text) %>% 
     unnest_tokens(word, text)

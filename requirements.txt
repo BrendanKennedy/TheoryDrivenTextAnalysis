@@ -22,3 +22,5 @@ sjPlot
 sjstats
 broom
 text2vec
+ggrepel
+ggcorrplot
