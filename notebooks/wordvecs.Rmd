@@ -1,0 +1,253 @@
+---
+title: "Word Vectors and Theory"
+author: "Brendan Kennedy & Joe Hoover"
+date: "February 29, 2020"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    toc: yes
+fig_width: 10
+fig_height: 4
+---
+```{r, echo=F, message=F, warning=F}
+# Define chunk options
+knitr::opts_chunk$set(echo=F, message=F, warning=F)
+```
+
+### Word Vectors and Dictionaries
+
+Word vectors can be used for a variety of things:
+
+* Text classification
+* Showing off fancy word analogies
+* Quantifying stereotypes in large English corpora
+
+We will be looking at a specific application: Distributed Dictionary Representations (DDR; Garten et al., 2018) apply word vectors to existing dictionaries. 
+
+We will be using Global Vectors for Word Representation (GloVe). Other options, like Word2Vec, perform similarly, but GloVe are more widely used.
+
+### Data and libraries for working with GloVe
+
+Primarily, we will be working with the `tidytext` and the `tidyverse`. The `text2vec` library has good/easy functions for text preprocessing, but these can be performed within the `tidyverse` if you are a #purist.
+
+Glove vectors [(download)](https://nlp.stanford.edu/projects/glove/) come in the form of text files (glove.6B.100d.txt). We will be working with vectors of length $100$, which have a small dip in performance from the full $300$ but take up less memory.
+
+```{r, setvars}
+library(tidyverse)
+library(text2vec)
+library(tidytext)
+library(knitr)
+library(ggrepel)
+library(ggcorrplot)
+library(jtools)
+library(gridExtra)
+
+GLOVE <- "~/Data/glove.6B.100d.txt"
+
+meta <- readRDS("./data/tdta_clean_house_data.RDS")
+meta <- meta[1:5000,]
+tdta <- meta %>% 
+    select(doc_num, text) %>% 
+    unnest_tokens(word, text)
+```
+
+### Dictionaries
+
+The Linguistic Inquiry and Word Count (LIWC) dictionary is the standard in dictionary analysis. We won't be using LIWC because it is proprietary (but for purchase!). Additionally, LIWC is generally very high quality, and so there are fewer problems we can fix with regard to LIWC's categories. 
+
+Sentiment analysis is the specific application of extracting the sentiment disposition of the speaker of a piece of text. It is widely of interest in industrial and scientific applications, and is a fairly hard problem. Historically, the most straight-forward sentiment analysis method is to use dictionaries.
+
+`tidytext` provides access to three sentiment lexicons, including the NRC. The [NRC](https://saifmohammad.com/WebPages/NRC-Emotion-Lexicon.htm) contains binary indicators for a large set of words for 8 basic emotions. All word labels are crowd-sourced.
+
+```{r loaddata, echo=F, results='asis'}
+sentiment <- tidytext::get_sentiments('nrc')
+sentiment <- sentiment %>%
+    filter(sentiment != "positive", sentiment != "negative")
+kable(sentiment %>% count(sentiment), caption="The NRC sentiment lexicon (English)")
+```
+
+### Loading GloVe
+
+Loading GloVe vectors (rather than training a model from scratch) is an important step in our methodology. The purpose of this type of analysis is (mostly) to take advantage of non-trivial linguistic structure learned from large language datasets, and we have no intentions of fitting models to massive datasets. However, learning word embeddings on one's own (assuming enough data) is another worthy task with embeddings in text analysis. 
+
+Loading GloVe is simple using the `readr::read_table2` function. We first construct a vocabulary, read the file, and pipe the embeddings tibble to a filter which only targets words in our vocabulary. 
+
+```{r, getglove, warning=F, message=F, echo=F}
+tdta <- tdta %>%
+    anti_join(stop_words) %>%
+    filter(word != "num")
+vocab <- unique(c(tdta$word, sentiment$word))
+cs <- c("word", 1:100)
+E <- read_table2(GLOVE, col_names = cs) %>%
+    filter(word %in% vocab)
+```
+
+### Computing Dictionary Centers
+
+We first compute a single vector representation *per dictionary category* (e.g., ``angry'' in the NRC). We will be using these averaged vectors to measure the content of each full document. 
+
+To do this step, we simply aggregate our sentiment dictionary at the category level and aggregate into means, per category. 
+
+```{r dictionarycenters}
+
+ddr_full <- sentiment %>%
+    left_join(E, by = "word") %>%
+    group_by(sentiment) %>%
+    summarise_at(vars(-word), list(mean=~mean(., na.rm=TRUE)))
+ddr_full
+```
+
+Our dictionary cent`ers are now ready, but first let's examine them to quantify exactly how well we're measuring, based on a priori knowledge of sentiment categories. 
+
+One check we can perform is to visualize the projection of the dictionary representations into 2-dimensional space, so we can look at the comparative closeness of different categories. Additionally, we will look at the cosine similarities between each dictionary. 
+
+Cosine similarity is intuitively the extent to which two vectors are point in the same direction, with $-1$ completely opposite directions and $1$ the same direction. In 100-dimensional space, it is hard to conceptualize such vectors, but cosine similarity provides a single scalar value for us to examine similarities between dictionaries without reducing dimensionality and losing information (as we did with projection onto 2-D space).
+
+```{r plotcenters, echo=F, warning=F, fig.width=10}
+
+plot_ddr <- function(embedding_tibble) {
+    
+    embedding_tibble$sentiment <- factor(embedding_tibble$sentiment,
+                                         levels=c("joy", "trust", "surprise", 
+                                                  "anticipation", "anger", 
+                                                  "fear", "sadness", "disgust"))
+    pca <- prcomp(as.matrix(embedding_tibble %>% 
+                                select(-sentiment)), rank=2)
+    pca.df <- as.data.frame(pca$x) %>%
+                        mutate(sentiment=embedding_tibble$sentiment)
+    pca_plot <- ggplot(pca.df, aes(PC1, PC2, label=sentiment)) + 
+        theme_bw() + 
+        geom_text_repel(aes(label=sentiment))
+    
+    sim_sentiment <- sim2(as.matrix(embedding_tibble %>%
+                                        select(-sentiment)), 
+                          method='cosine', norm = "l2")
+    colnames(sim_sentiment) <- embedding_tibble$sentiment
+    rownames(sim_sentiment) <- embedding_tibble$sentiment
+    
+    sim_plot <- ggcorrplot(sim_sentiment, 
+                           hc.order = TRUE, 
+                           type = "lower", 
+                           lab = TRUE) + 
+       scale_fill_gradient(limit = c(0,1), 
+                            low = "white", 
+                            high = "purple") +
+        theme(legend.position = "none") 
+    return(grid.arrange(pca_plot, sim_plot, ncol=2))
+}
+
+plot_ddr(ddr_full)
+```
+
+
+The visualization shows that disgust, sadness, fear, and anger are all very similar in our embedding space, with surprise, joy, anticipation, and 
+
+### How many words to use?
+
+A really important question with word counting applications is: how well does the word set *cover* the construct? There are many ways to express a positive emotion, for example, so enumerating all these words is important. But for DDR and similar methods, parsimony and prototypicality are more important. 
+
+Why? As more words are added to the pile, the average word vector gets closer and closer to **zero**, or essentially meaningless. The below is from Garten et al., 2018.
+
+![dictionary performance by dictionary size](figures/dictionary_size_fig.png)
+
+First we will subsample dictionaries randomly, down to 20 (chosen somewhat arbitrarily). Then, we will use our powers of omniscience to select the four most prototypical words per category, to see if we can guide representations to the "true" centers.
+
+```{r, sampleddictionaries}
+
+ddr_sampled <- sentiment %>%
+    left_join(E, by = "word") %>%
+    group_by(sentiment) %>%
+    sample_n(20) %>%
+    summarise_at(vars(-word), list(mean=~mean(., na.rm=TRUE)))
+
+sentiment_list <- rep(c("anger", "anticipation", "disgust", "fear", "joy", "sadness", "surprise", "trust"), each=4)
+word_list <- c("anger", "outrage", "furious", "rage",
+               "waiting", "anxious", "anticipation", "worry",
+               "disgust", "appalling", "revolting", "abhor",
+               "fear", "afraid", "alarming", "terror",
+               "joy", "happy", "love", "wonderful",
+               "sad", "depressed", "cry", "tragic",
+               "surprise", "shock", "unexpected", "alarm",
+               "trust", "friend", "reliable", "together")
+sentiment2 <- data.frame(sentiment=factor(sentiment_list, levels=sort(unique(sentiment$sentiment))),
+                         word=factor(word_list))
+
+ddr_selected <- sentiment2 %>%
+    left_join(E, by = "word") %>%
+    group_by(sentiment) %>%
+    summarise_at(vars(-word), list(mean=~mean(., na.rm=TRUE)))
+
+```
+
+```{r plot_full, message=F, warning=F, error=F, fig.width=10}
+plot_ddr(ddr_sampled)
+plot_ddr(ddr_selected)
+```
+
+One important note is that randomly sampling words from the dictionaries is highly volatile, especially with a crowdsampled dictionary. Different runs will get different (within reason) dictionary centers, while manually selected words will produce centers deterministically.
+
+### Generating representations for our corpus
+
+With our corpus of political speeches, we will now estimate each document's "loading" onto each dimension of sentiment by computing the similarity between dictionary centers and the average word embedding of each sentence. 
+
+This is in two steps: first, join (and mean-aggregate) our tidy corpus, which is super easy when it's in tidy format! Second, we use `text2vec`'s `sim2` function in order to compute row-wise similarities between two matrices. 
+
+```{r, tidysentiment, echo=TRUE}
+
+get_ddr_corpus <- function(tidycorpus, E, dictionary) {
+    corpus_mean_vecs <- tidycorpus %>%
+        left_join(E, by='word') %>%
+        group_by(doc_num) %>%  # specific to this dataset, not modular
+        summarise_at(vars(-word), list(mean=~mean(., na.rm=TRUE)))
+    
+    doc_nums <- corpus_mean_vecs$doc_num
+    sentiment_idx <- dictionary$sentiment
+    
+    corpus_ddr <- sim2(as.matrix(corpus_mean_vecs %>% 
+                                      select(-doc_num)),
+                        as.matrix(dictionary %>% 
+                                      select(-sentiment)),
+                        method = 'cosine', norm = 'l2')
+    
+    corpus_ddr <- as.data.frame(corpus_ddr)
+    colnames(corpus_ddr) <- sentiment_idx 
+    rownames(corpus_ddr) <- doc_nums
+    corpus_ddr <- corpus_ddr %>%
+        rownames_to_column(var="doc_num") %>%
+        as_tibble()
+    return(corpus_ddr)
+}
+
+corpus_full <- get_ddr_corpus(tdta, E, ddr_full)
+corpus_selected <- get_ddr_corpus(tdta, E, ddr_selected)
+
+```
+
+### Analyzing the resulting dictionary representations
+
+What are the distributions of dictionary loadings across the corpus? The following plots show the densities for the full dictionary centers and the manually selected dictionary centers. 
+
+```{r analyzecorpus, fig.height=10}
+
+selected_dists <- ggplot(corpus_selected %>%
+       pivot_longer(cols=anger:trust,
+                    names_to="sentiment", 
+                    values_to="similarity"),
+       aes(x=similarity, fill=sentiment)) + 
+    geom_density(alpha=0.15) + facet_wrap(.~sentiment, ncol=2) + 
+    ggtitle("Distributions of DDR vectors for manually subsampled words")
+
+full_dists <- ggplot(corpus_full %>%
+       pivot_longer(cols=anger:trust,
+                    names_to="sentiment", 
+                    values_to="similarity"),
+       aes(x=similarity, fill=sentiment)) + 
+    geom_density(alpha=0.15) + facet_wrap(.~sentiment, ncol=2) + 
+    ggtitle("Distributions of DDR vectors for entire lexicons")
+
+grid.arrange(full_dists, selected_dists, ncol=1)
+
+```
+
