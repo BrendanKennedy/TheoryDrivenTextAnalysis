@@ -1,0 +1,7 @@
+A brief introduction to Text Analysis - https://docs.google.com/presentation/d/1gnROXcP9Y0r-tlvpJKzHfMGVd-Hq7j6yPI4UbHGMhR4/edit?usp=sharing
+
+Word counts - https://docs.google.com/presentation/d/10V5wa_RbjNFh2OoIhN6NrCeQ5Z_LcsapWZRsJHe6vGI/edit?usp=sharing
+
+Topic modeling - https://docs.google.com/presentation/d/1Tvi6l6ker80LxhI6AjNuXY7_8WQ4FLQKE7I5R-fvXms/edit?usp=sharing
+
+Word embeddings - https://docs.google.com/presentation/d/10V5wa_RbjNFh2OoIhN6NrCeQ5Z_LcsapWZRsJHe6vGI/edit?usp=sharing
